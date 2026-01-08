@@ -9,64 +9,85 @@ import {
   ArrowBackIosNew as ArrowBackIcon,
   ArrowForwardIos as ArrowForwardIcon,
   NotificationsNone as NotificationsIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  CheckCircle as CheckCircleIcon
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 
 function Notifications() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  useEffect(() => {
-    async function fetchNotifications() {
-      try {
-        setLoading(true);
-        const res = await fetch("http://localhost:3001/api/notifications", {
-          method: "GET",
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error("Failed to fetch notifications");
-        const data = await res.json();
-        setNotifications(data);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+  // ✅ REFRESH FUNCTION - Updates count + list
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("http://localhost:3001/api/notifications", {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch notifications");
+      const data = await res.json();
+      
+      const unread = data.filter(n => n.viewed === 0).length;
+      setUnreadCount(unread);
+      setNotifications(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     fetchNotifications();
   }, []);
 
-  const handleNotificationClick = (notification) => {
-    setSelectedNotification(notification);
-    setModalOpen(true);
-  };
-
+  // ✅ MARK SINGLE NOTIFICATION AS READ - PERFECT!
   const handleMarkAsRead = async (id) => {
     try {
       const res = await fetch(`http://localhost:3001/api/notifications/${id}/read`, {
         method: "POST",
         credentials: "include",
       });
+      
       if (!res.ok) throw new Error("Failed to mark notification as read");
-      setNotifications((prev) =>
-        prev.map((notif) =>
+      
+      // ✅ OPTIMISTIC UPDATE - UI changes INSTANTLY
+      setNotifications(prev => 
+        prev.map(notif => 
           notif.id === id ? { ...notif, viewed: 1 } : notif
         )
       );
+      
+      // ✅ COUNT DECREASES BY 1 ONLY
+      setUnreadCount(prev => Math.max(0, prev - 1));
+      
       if (selectedNotification?.id === id) {
         setSelectedNotification({ ...selectedNotification, viewed: 1 });
       }
     } catch (err) {
-      console.error(err);
+      console.error("Mark as read error:", err);
+      fetchNotifications(); // Refresh on error
     }
   };
 
-  const unreadCount = notifications.filter((n) => n.viewed === 0).length;
+  // ✅ PERFECT SINGLE NOTIFICATION CLICK - AUTO MARK AS READ
+  const handleNotificationClick = (notification) => {
+    setSelectedNotification(notification);
+    setModalOpen(true);
+    
+    // ✅ ONLY MARK THIS ONE AS READ when clicked
+    if (notification.viewed === 0) {
+      handleMarkAsRead(notification.id);
+    }
+  };
+
   const sortedNotifications = [...notifications].sort((a, b) => 
     new Date(b.created_at) - new Date(a.created_at)
   );
@@ -106,6 +127,13 @@ function Notifications() {
           <Typography color="textSecondary">
             {error}
           </Typography>
+          <Button 
+            variant="contained" 
+            sx={{ mt: 2 }}
+            onClick={fetchNotifications}
+          >
+            Retry
+          </Button>
         </Paper>
       </Box>
     );
@@ -185,7 +213,7 @@ function Notifications() {
             </Typography>
           </Breadcrumbs>
 
-          {/* Header */}
+          {/* Header - NO "Mark All" button */}
           <Stack direction="row" alignItems="center" mb={4}>
             <Badge 
               badgeContent={unreadCount} 
@@ -195,7 +223,7 @@ function Notifications() {
             >
               <NotificationsIcon sx={{ fontSize: 32, color: "#1976d2" }} />
             </Badge>
-            <Box>
+            <Box flexGrow={1}>
               <Typography variant="h3" fontWeight={500} sx={{ color: "#1a1a1a" }}>
                 🔔 Your Notifications
               </Typography>
@@ -379,11 +407,12 @@ function Notifications() {
                       setModalOpen(false);
                     }}
                     disabled={selectedNotification.viewed === 1}
+                    startIcon={selectedNotification.viewed === 1 ? <CheckCircleIcon /> : null}
                     sx={{
                       fontWeight: 700,
                       borderRadius: 2,
                       px: 4,
-                      bgcolor: selectedNotification.viewed === 1 ? "#ccc" : "#1976d2",
+                      bgcolor: selectedNotification.viewed === 1 ? "#4caf50" : "#1976d2",
                     }}
                   >
                     {selectedNotification.viewed === 1 ? "✓ Read" : "Mark as Read"}

@@ -7,18 +7,55 @@ import {
   CardContent,
   CardActionArea,
   Button,
+  CircularProgress,
+  Alert,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
 function Clients() {
   const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch("http://localhost:3001/api/clients")
-      .then((res) => res.json())
-      .then((data) => setClients(data));
+    fetchClients();
   }, []);
+
+  const fetchClients = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      
+      // ✅ FIXED: Admin auth + error handling
+      const response = await fetch("http://localhost:3001/api/clients", {
+        credentials: "include",  // Admin session
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setClients(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("🚨 Clients fetch error:", err);
+      setError("Failed to load clients. Please login as admin.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ FIXED: Refresh button
+  const handleRefresh = () => fetchClients();
+
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -43,14 +80,7 @@ function Clients() {
           mb: 4,
         }}
       >
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            mb: 3,
-          }}
-        >
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 3 }}>
           <Typography
             variant="h4"
             sx={{
@@ -60,31 +90,55 @@ function Clients() {
               lineHeight: 1.2,
             }}
           >
-            Clients
+            Clients ({clients.length})
           </Typography>
-          <Button
-            variant="contained"
-            color="primary"
-            size="large"
-            sx={{
-              borderRadius: 2,
-              fontWeight: 700,
-              textTransform: "none",
-              px: 3,
-              boxShadow: "0 2px 8px rgba(25,118,210,0.13)",
-            }}
-            onClick={() => navigate("/clients/new")}
-          >
-            Add Client
-          </Button>
+          
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={handleRefresh}
+              sx={{ borderRadius: 2, textTransform: "none" }}
+              startIcon={loading ? <CircularProgress size={20} /> : null}
+            >
+              Refresh
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              size="large"
+              onClick={() => navigate("/clients/new")}
+              sx={{
+                borderRadius: 2,
+                fontWeight: 700,
+                textTransform: "none",
+                px: 3,
+                boxShadow: "0 2px 8px rgba(25,118,210,0.13)",
+              }}
+            >
+              Add Client
+            </Button>
+          </Box>
         </Box>
 
-        {clients.length === 0 ? (
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError("")}>
+            {error}
+            <Button size="small" onClick={handleRefresh} sx={{ ml: 2 }}>
+              Retry
+            </Button>
+          </Alert>
+        )}
+
+        {clients.length === 0 && !loading ? (
           <Typography
             color="text.secondary"
-            sx={{ mt: 4, fontStyle: "italic" }}
+            sx={{ mt: 4, fontStyle: "italic", textAlign: "center" }}
           >
-            No clients found. Click "Add Client" to get started.
+            No clients found.{" "}
+            <Button onClick={() => navigate("/clients/new")} size="small">
+              Create first client
+            </Button>
           </Typography>
         ) : (
           <Grid container spacing={3}>
@@ -109,6 +163,7 @@ function Clients() {
                     sx={{ borderRadius: 3 }}
                   >
                     <CardContent>
+                      {/* ✅ FIXED: Use correct database fields! */}
                       <Typography
                         variant="h6"
                         sx={{
@@ -119,7 +174,7 @@ function Clients() {
                         }}
                         gutterBottom
                       >
-                        {client.name}
+                        {client.fullname}  {/* ✅ Database: fullname */}
                       </Typography>
                       <Typography
                         sx={{
@@ -129,7 +184,19 @@ function Clients() {
                           fontSize: ".98rem",
                         }}
                       >
-                        {client.company}
+                        {client.company}    {/* ✅ Database: company */}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        sx={{ color: "#9e9e9e", display: "block", mt: 0.5 }}
+                      >
+                        {client.email}      {/* ✅ Database: email */}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        sx={{ color: "#9e9e9e", display: "block" }}
+                      >
+                        {client.cell || client.tel}  {/* Phone */}
                       </Typography>
                     </CardContent>
                   </CardActionArea>

@@ -5,10 +5,9 @@ import {
   Divider,
   Table,
   TableHead,
+  TableBody,
   TableRow,
   TableCell,
-  TableBody,
-  Button,
 } from "@mui/material";
 
 const InvoicePrintView = ({ invoice }) => {
@@ -29,10 +28,6 @@ const InvoicePrintView = ({ invoice }) => {
     invoice.total_vat ?? invoice.amount - totalExcl;
   const totalIncl = invoice.total_incl ?? invoice.amount;
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   return (
     <Box
       sx={{
@@ -46,28 +41,6 @@ const InvoicePrintView = ({ invoice }) => {
         boxSizing: "border-box",
       }}
     >
-      {/* Action bar: print/download */}
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "flex-end",
-          mb: 2,
-        }}
-      >
-        <Button
-          variant="contained"
-          size="small"
-          onClick={handlePrint}
-          sx={{
-            textTransform: "none",
-            borderRadius: 2,
-            fontWeight: 600,
-          }}
-        >
-          Print / Download
-        </Button>
-      </Box>
-
       {/* Top title */}
       <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>
         Tax Invoice
@@ -134,7 +107,7 @@ const InvoicePrintView = ({ invoice }) => {
         </Typography>
       </Box>
 
-      {/* Items table – single retainer row for now */}
+      {/* Items table */}
       <Table size="small" sx={{ mb: 3 }}>
         <TableHead>
           <TableRow sx={{ bgcolor: "#f5f5f5" }}>
@@ -162,9 +135,46 @@ const InvoicePrintView = ({ invoice }) => {
         </TableBody>
       </Table>
 
-      {/* Totals */}
-      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 3 }}>
-        <Box sx={{ minWidth: 260 }}>
+      {/* ✅ TOTALS + BANKING SIDE-BY-SIDE (SQUARE BANK BOX) */}
+      <Box sx={{ display: "flex", gap: 3, mb: 3 }}>
+        {/* LEFT: Banking Details - SQUARE BOX */}
+        <Box
+          sx={{
+            flex: "0 0 140px", // Fixed width = square
+            height: "fit-content",
+            p: 1.5,
+            border: "2px solid #333",
+            borderRadius: 1,
+            bgcolor: "#f9f9f9",
+            fontSize: "0.8rem",
+          }}
+        >
+          <Typography fontWeight={700} sx={{ mb: 0.5, fontSize: "0.85rem" }}>
+            🏦 Bank Details
+          </Typography>
+          <Box sx={{ lineHeight: 1.1 }}>
+            <Typography sx={{ fontSize: "0.75rem" }}>
+              <strong>Beneficiary:</strong><br />
+              Internship Success
+            </Typography>
+            <Typography sx={{ fontSize: "0.75rem" }}>
+              <strong>Bank:</strong><br />
+              Nedbank Crossings
+            </Typography>
+            <Typography sx={{ fontSize: "0.75rem" }}>
+              <strong>Acc:</strong> 1241597879
+            </Typography>
+            <Typography sx={{ fontSize: "0.75rem" }}>
+              <strong>Branch:</strong> 167 965
+            </Typography>
+            <Typography sx={{ fontSize: "0.7rem", mt: 0.5 }}>
+              <em>Ref: #{invoice.invoice_number}</em>
+            </Typography>
+          </Box>
+        </Box>
+
+        {/* RIGHT: Totals - Same height */}
+        <Box sx={{ flex: 1, minWidth: 260 }}>
           <Box sx={{ display: "flex", justifyContent: "space-between" }}>
             <Typography>Total Discount:</Typography>
             <Typography>R 0.00</Typography>
@@ -204,17 +214,6 @@ const InvoicePrintView = ({ invoice }) => {
             </Typography>
           </Box>
         </Box>
-      </Box>
-
-      {/* Notes / bank details */}
-      <Box sx={{ mt: 4, fontSize: "0.8rem" }}>
-        <Typography fontWeight={700} sx={{ mb: 0.5 }}>
-          Notes:
-        </Typography>
-        <Typography>
-          Internship Success (Pty) Ltd · Nedbank Crossings, Nelspruit · Acc:
-          1241597879 · Branch Code: 167 965
-        </Typography>
       </Box>
     </Box>
   );

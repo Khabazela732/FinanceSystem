@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box,
   Typography,
@@ -34,8 +34,10 @@ function Clients() {
   const [search, setSearch] = useState("");
   const [selectedClient, setSelectedClient] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const navigate = useNavigate();
 
+  // ✅ LOAD LIST OF CLIENTS (8 fields - FAST)
   useEffect(() => {
     async function loadClients() {
       try {
@@ -65,6 +67,35 @@ function Clients() {
     loadClients();
   }, [navigate]);
 
+  // 🚀 NEW! LOAD FULL CLIENT DETAILS when modal opens
+  const loadFullClientDetails = async (clientId) => {
+    try {
+      setLoadingDetails(true);
+      const res = await fetch(`http://localhost:3001/api/clients/${clientId}/details`, {
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          alert("Session expired. Please log in again.");
+          navigate("/login");
+          return null;
+        }
+        throw new Error("Failed to load client details");
+      }
+
+      const fullClientData = await res.json();
+      console.log("✅ FULL CLIENT DETAILS LOADED:", fullClientData);
+      return fullClientData;
+    } catch (err) {
+      console.error("🚨 Error loading full client details:", err);
+      alert("Failed to load client details. Showing basic info only.");
+      return null;
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
   const filteredClients = Array.isArray(clients)
     ? clients.filter((c) =>
         (c.company || "").toLowerCase().includes(search.toLowerCase())
@@ -75,8 +106,10 @@ function Clients() {
     navigate("/dashboard");
   };
 
-  const handleClientClick = (client) => {
-    setSelectedClient(client);
+  // ✅ FIXED! Now loads FULL details for modal
+  const handleClientClick = async (client) => {
+    const fullDetails = await loadFullClientDetails(client.id);
+    setSelectedClient(fullDetails || client); // Use full details OR fallback to basic
     setOpenDialog(true);
   };
 
@@ -426,165 +459,164 @@ function Clients() {
         </DialogTitle>
 
         <DialogContent sx={{ p: 2.5 }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <Typography
-                variant="subtitle2"
-                sx={{ color: "#1976d2", fontWeight: 600, mb: 1 }}
-              >
-                Contact information
-              </Typography>
-              <Box sx={{ mb: 1.5 }}>
-                <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
-                  Email
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {selectedClient?.email || "—"}
-                </Typography>
-              </Box>
-              <Box sx={{ mb: 1.5 }}>
-                <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
-                  Telephone
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {selectedClient?.tel || "—"}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
-                  Cell
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {selectedClient?.cell || "—"}
-                </Typography>
-              </Box>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <Typography
-                variant="subtitle2"
-                sx={{ color: "#1976d2", fontWeight: 600, mb: 1 }}
-              >
-                Company details
-              </Typography>
-              <Box sx={{ mb: 1.5 }}>
-                <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
-                  Registration no.
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {selectedClient?.reg || "—"}
-                </Typography>
-              </Box>
-              <Box sx={{ mb: 1.5 }}>
-                <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
-                  VAT no.
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {selectedClient?.vat || "—"}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
-                  Number of interns
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {selectedClient?.noi || "—"}
-                </Typography>
-              </Box>
-            </Grid>
-
-            <Grid item xs={12}>
-              <Typography
-                variant="subtitle2"
-                sx={{ color: "#1976d2", fontWeight: 600, mb: 1 }}
-              >
-                Address
-              </Typography>
-              <Paper
-                sx={{
-                  p: 2,
-                  bgcolor: "#fafafa",
-                  borderRadius: 1.5,
-                  boxShadow: "none",
-                }}
-              >
-                <Grid container spacing={1.5}>
-                  <Grid item xs={12} sm={6}>
-                    <Typography
-                      variant="caption"
-                      sx={{ color: "#9e9e9e" }}
-                    >
-                      Street
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {selectedClient?.street || "—"}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography
-                      variant="caption"
-                      sx={{ color: "#9e9e9e" }}
-                    >
-                      Town/City
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {selectedClient?.town || "—"}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography
-                      variant="caption"
-                      sx={{ color: "#9e9e9e" }}
-                    >
-                      Province
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {selectedClient?.province || "—"}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography
-                      variant="caption"
-                      sx={{ color: "#9e9e9e" }}
-                    >
-                      Postal code
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {selectedClient?.postalcode || "—"}
-                    </Typography>
-                  </Grid>
-                </Grid>
-              </Paper>
-            </Grid>
-
-            <Grid item xs={12}>
-              <Box
-                sx={{
-                  mt: 2,
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: 1.5,
-                }}
-              >
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={handleCloseDialog}
-                  sx={{ textTransform: "none", borderRadius: 2 }}
+          {loadingDetails ? (
+            <Box sx={{ textAlign: "center", py: 4 }}>
+              <Typography>Loading client details...</Typography>
+            </Box>
+          ) : (
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{ color: "#1976d2", fontWeight: 600, mb: 1 }}
                 >
-                  Close
-                </Button>
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={handleEditClient}
-                  sx={{ textTransform: "none", borderRadius: 2 }}
+                  Contact information
+                </Typography>
+                <Box sx={{ mb: 1.5 }}>
+                  <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
+                    Email
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {selectedClient?.email || "—"}
+                  </Typography>
+                </Box>
+                <Box sx={{ mb: 1.5 }}>
+                  <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
+                    Telephone
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {selectedClient?.tel || "—"}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
+                    Cell
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {selectedClient?.cell || "—"}
+                  </Typography>
+                </Box>
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{ color: "#1976d2", fontWeight: 600, mb: 1 }}
                 >
-                  Edit details
-                </Button>
-              </Box>
+                  Company details
+                </Typography>
+                <Box sx={{ mb: 1.5 }}>
+                  <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
+                    Registration no.
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {selectedClient?.reg || "—"}
+                  </Typography>
+                </Box>
+                <Box sx={{ mb: 1.5 }}>
+                  <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
+                    VAT no.
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {selectedClient?.vat || "—"}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" sx={{ color: "#9e9e9e" }}>
+                    Number of interns
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {selectedClient?.noi || "—"}
+                  </Typography>
+                </Box>
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{ color: "#1976d2", fontWeight: 600, mb: 1 }}
+                >
+                  Address
+                </Typography>
+                <Paper
+                  sx={{
+                    p: 2,
+                    bgcolor: "#fafafa",
+                    borderRadius: 1.5,
+                    boxShadow: "none",
+                  }}
+                >
+                  <Grid container spacing={1.5}>
+                    <Grid item xs={12} sm={6}>
+                      <Typography
+                        variant="caption"
+                        sx={{ color: "#9e9e9e" }}
+                      >
+                        Street
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {selectedClient?.street || "—"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography
+                        variant="caption"
+                        sx={{ color: "#9e9e9e" }}
+                      >
+                        Town/City
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {selectedClient?.town || "—"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography
+                        variant="caption"
+                        sx={{ color: "#9e9e9e" }}
+                      >
+                        Province
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {selectedClient?.province || "—"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography
+                        variant="caption"
+                        sx={{ color: "#9e9e9e" }}
+                      >
+                        Postal code
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {selectedClient?.postalcode || "—"}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Paper>
+              </Grid>
+
+              <Grid item xs={12}>
+                <Box
+                  sx={{
+                    mt: 2,
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: 1.5,
+                  }}
+                >
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleCloseDialog}
+                    sx={{ textTransform: "none", borderRadius: 2 }}
+                  >
+                    Close
+                  </Button>
+                  
+                </Box>
+              </Grid>
             </Grid>
-          </Grid>
+          )}
         </DialogContent>
       </Dialog>
     </Box>

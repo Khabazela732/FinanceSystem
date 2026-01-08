@@ -25,6 +25,7 @@ import ClientDashboard from "./Components/ClientDashboard";
 import UploadedProofs from "./Components/UploadedProofs";
 import ClientUpdateDetails from "./Components/ClientUpdateDetails"; 
 import AdminSettings from "./Components/AdminSettings";
+import ProofViewer from "./Components/ProofViewer";
 
 
 
@@ -245,24 +246,25 @@ function EntranceScreen() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<EntranceScreen />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/notifications" element={<Notifications />} />
-      <Route path="/clients/new" element={<ClientForm />} />
-      <Route path="/clients" element={<Clients />} />
-      <Route path="/clients/login" element={<ClientLogin />} />
-      <Route path="/invoices" element={<Invoices />} />
-      <Route path="/invoices/new" element={<InvoiceForm />} />
-      <Route path="/reset-password/:token" element={<ResetPassword />} />
-      <Route path="/clients/dashboard/:id" element={<ClientDashboard />} />
-      <Route path="/uploaded-proofs" element={<UploadedProofs />} />
-      <Route path="/clients/update-company" element={<ClientUpdateDetails />} />
-      <Route path="/settings" element={<AdminSettings />} />
+<Routes>
+  <Route path="/" element={<EntranceScreen />} />
+  <Route path="/signup" element={<Signup />} />
+  <Route path="/login" element={<Login />} />
+  <Route path="/dashboard" element={<Dashboard />} />
+  <Route path="/notifications" element={<Notifications />} />
+  <Route path="/clients/new" element={<ClientForm />} />
+  <Route path="/clients" element={<Clients />} />
+  <Route path="/clients/login" element={<ClientLogin />} />
+  <Route path="/invoices" element={<Invoices />} />
+  <Route path="/invoices/new" element={<InvoiceForm />} />
+  <Route path="/reset-password/:token" element={<ResetPassword />} />
+  <Route path="/clients/dashboard/:id" element={<ClientDashboard />} />
+  <Route path="/uploaded-proofs" element={<UploadedProofs />} />
+  <Route path="/clients/update-company" element={<ClientUpdateDetails />} />
+  <Route path="/settings" element={<AdminSettings />} />
+  {/* NEW: Proof Viewer Route */}
+  <Route path="/proofs/:id" element={<ProofViewer />} />
+</Routes>
 
-      
-    </Routes>
   );
 }

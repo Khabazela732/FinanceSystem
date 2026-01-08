@@ -13,6 +13,8 @@ import {
   Select,
   MenuItem,
   InputAdornment,
+  IconButton,
+  Alert,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import {
@@ -27,6 +29,7 @@ import {
   PinDrop,
   Groups,
   Person as PersonIcon,
+  ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
 
 const SOUTH_AFRICAN_PROVINCES = [
@@ -74,6 +77,8 @@ function ClientForm() {
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -104,43 +109,35 @@ function ClientForm() {
   const validate = () => {
     const errs = {};
 
-    if (!form.username) errs.username = "Username required";
-    if (!form.fullname) errs.fullname = "Full name required";
-    if (!form.lastname) errs.lastname = "Last name required";
-    if (!form.company) errs.company = "Company name required";
+    if (!form.username.trim()) errs.username = "Username required";
+    if (!form.fullname.trim()) errs.fullname = "First name required";
+    if (!form.lastname.trim()) errs.lastname = "Last name required";
+    if (!form.company.trim()) errs.company = "Company name required";
 
-    if (!form.email) errs.email = "Email required";
-    else if (!/\S+@\S+\.\S+/.test(form.email))
-      errs.email = "Enter valid email";
+    if (!form.email.trim()) errs.email = "Email required";
+    else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email = "Enter valid email";
 
-    if (!form.password) errs.password = "Password required";
-    if (!form.confirmPassword) errs.confirmPassword = "Confirm password";
-    else if (form.password !== form.confirmPassword)
-      errs.confirmPassword = "Passwords must match";
+    if (!form.password || form.password.length < 6) errs.password = "Password must be 6+ characters";
+    if (!form.confirmPassword) errs.confirmPassword = "Confirm password required";
+    else if (form.password !== form.confirmPassword) errs.confirmPassword = "Passwords must match";
 
-    if (!form.street) errs.street = "Street required";
+    if (!form.street.trim()) errs.street = "Street required";
+    if (!form.province.trim()) errs.province = "Province required";
 
-    if (!form.province) errs.province = "Province required";
+    const finalTown = form.province === "Mpumalanga" && form.town === "Other" ? form.customTown : form.town;
+    if (!finalTown?.trim()) errs.town = "Town required";
 
-    const finalTown =
-      form.province === "Mpumalanga" && form.town === "Other"
-        ? form.customTown
-        : form.town;
-    if (!finalTown) errs.town = "Town required";
+    if (!form.postalcode.trim()) errs.postalcode = "Postal code required";
+    else if (!/^\d{4}$/.test(form.postalcode)) errs.postalcode = "Postal code must be 4 digits";
 
-    if (!form.postalcode) errs.postalcode = "Postal code required";
-    else if (!/^\d{4}$/.test(form.postalcode))
-      errs.postalcode = "Postal code must be 4 digits";
+    if (!form.reg.trim()) errs.reg = "Company registration number required";
+    if (!form.vat.trim()) errs.vat = "VAT number required";
 
-    if (!form.reg) errs.reg = "Company registration number required";
-    if (!form.vat) errs.vat = "VAT number required";
+    if (!form.noi.trim()) errs.noi = "Number of interns required";
+    else if (isNaN(Number(form.noi)) || Number(form.noi) < 1) errs.noi = "Must be positive number";
 
-    if (!form.noi) errs.noi = "Number of interns required";
-    else if (isNaN(Number(form.noi)) || Number(form.noi) < 1)
-      errs.noi = "Number of interns must be a positive number";
-
-    if (!form.tel) errs.tel = "Telephone required";
-    if (!form.cell) errs.cell = "Cellphone required";
+    if (!form.tel.trim()) errs.tel = "Telephone required";
+    if (!form.cell.trim()) errs.cell = "Cellphone required";
 
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -148,541 +145,213 @@ function ClientForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitError("");
+    setSuccessMessage("");
+
     if (!validate()) return;
 
     setSubmitting(true);
 
-    const finalTown =
-      form.province === "Mpumalanga" && form.town === "Other"
-        ? form.customTown
-        : form.town;
+    const finalTown = form.province === "Mpumalanga" && form.town === "Other"
+      ? form.customTown.trim()
+      : form.town.trim();
 
     try {
-      const response = await fetch("http://localhost:3001/api/clients/new", {
+      const payload = {
+        username: form.username.trim(),
+        fullname: form.fullname.trim(),
+        lastname: form.lastname.trim(),
+        company: form.company.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        street: form.street.trim(),
+        town: finalTown,
+        province: form.province,
+        postalcode: form.postalcode.trim(),
+        reg: form.reg.trim(),
+        vat: form.vat.trim(),
+        noi: parseInt(form.noi) || 1,
+        tel: form.tel.trim(),
+        cell: form.cell.trim(),
+      };
+
+      console.log("🚀 SENDING PAYLOAD:", payload);
+
+      const response = await fetch("http://localhost:3001/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          username: form.username,
-          fullname: form.fullname,
-          lastname: form.lastname,
-          company: form.company,
-          email: form.email,
-          password: form.password,
-          street: form.street,
-          town: finalTown,
-          province: form.province,
-          postalcode: form.postalcode,
-          reg: form.reg,
-          vat: form.vat,
-          noi: form.noi,
-          tel: form.tel,
-          cell: form.cell,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (response.ok) {
+      const data = await response.json();
+      console.log("📡 RESPONSE:", data);
+
+      if (response.ok && data.success) {
+        setSuccessMessage(`✅ "${payload.company}" created successfully! Welcome email sent. Redirecting to clients list...`);
+        
         setForm({
-          username: "",
-          fullname: "",
-          lastname: "",
-          company: "",
-          email: "",
-          password: "",
-          confirmPassword: "",
-          street: "",
-          town: "",
-          customTown: "",
-          province: "",
-          postalcode: "",
-          reg: "",
-          vat: "",
-          noi: "",
-          tel: "",
-          cell: "",
+          username: "", fullname: "", lastname: "", company: "", email: "",
+          password: "", confirmPassword: "", street: "", town: "", customTown: "",
+          province: "", postalcode: "", reg: "", vat: "", noi: "", tel: "", cell: ""
         });
         setErrors({});
-        navigate("/clients");
+
+        setTimeout(() => navigate("/clients"), 2500);
       } else {
-        const errorData = await response.json();
-        alert(errorData.message || "Error creating client!");
+        setSubmitError(data.message || `Error ${response.status}`);
       }
     } catch (error) {
-      alert("Network error: " + error.message);
+      console.error("🚨 NETWORK ERROR:", error);
+      setSubmitError("Network error - is backend running?");
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Shared styling for fields (clean white inputs, dark text, subtle borders)
+  const handleBack = () => navigate("/clients");
+
+  // ✅ UPDATED: Light blue border styling
   const commonFieldSx = {
     mb: 1.5,
-    "& .MuiOutlinedInput-root": {
+    "& .MuiOutlinedInput-root": { 
       bgcolor: "#ffffff",
+      "& fieldset": {
+        borderColor: "#60a5fa", // Light blue border
+        borderWidth: "2px",
+      },
+      "&:hover fieldset": {
+        borderColor: "#3b82f6", // Slightly darker on hover
+      },
+      "&.Mui-focused fieldset": {
+        borderColor: "#2563eb", // Darker blue when focused
+        borderWidth: "2px",
+      },
     },
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        bgcolor: "#f4f5f7",      // light background
-        p: 4,
-      }}
-    >
-      <Card
-        sx={{
-          maxWidth: 820,
-          width: "100%",
-          borderRadius: 3,
-          bgcolor: "#ffffff",
-          color: "#111827",
-          boxShadow: "0 18px 45px rgba(15,23,42,0.18)",
-          border: "1px solid #e5e7eb",
-        }}
-      >
+    <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#f4f5f7", p: 4 }}>
+      <Card sx={{ maxWidth: 820, width: "100%", borderRadius: 3, bgcolor: "#ffffff", color: "#111827", boxShadow: "0 18px 45px rgba(15,23,42,0.18)", border: "1px solid #e5e7eb" }}>
         <CardContent sx={{ p: 4 }}>
-          {/* Header row to echo dashboard feel */}
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              mb: 3,
-              justifyContent: "space-between",
-            }}
-          >
-            <Box>
-              <Typography
-                variant="h5"
-                sx={{ fontWeight: 800, color: "#111827", mb: 0.5 }}
-              >
-                Register HostEmployer
-              </Typography>
-              <Typography
-                variant="body2"
-                sx={{ color: "#6b7280" }}
-              >
-                Capture company and contact details for the client dashboard.
-              </Typography>
+          {/* Header */}
+          <Box sx={{ display: "flex", alignItems: "center", mb: 3, justifyContent: "space-between" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <IconButton onClick={handleBack} sx={{ color: "#6b7280", "&:hover": { bgcolor: "#f3f4f6" } }}>
+                <ArrowBackIcon />
+              </IconButton>
+              <Box>
+                <Typography variant="h5" sx={{ fontWeight: 800, color: "#111827", mb: 0.5 }}>
+                  Register HostEmployer
+                </Typography>
+                <Typography variant="body2" sx={{ color: "#6b7280" }}>
+                  Admin login required. Fields match database exactly.
+                </Typography>
+              </Box>
             </Box>
           </Box>
 
-          <form
-            onSubmit={handleSubmit}
-            style={{ display: "flex", flexDirection: "column", width: "100%" }}
-            noValidate
-          >
-            {/* Section 1 */}
-            <Typography
-              variant="subtitle2"
-              sx={{
-                fontWeight: 700,
-                mb: 1,
-                color: "#374151",
-                textTransform: "uppercase",
-                letterSpacing: 0.6,
-              }}
+          {/* SUCCESS & ERROR MESSAGES */}
+          {submitError && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSubmitError("")}>
+              {submitError}
+            </Alert>
+          )}
+          {successMessage && (
+            <Alert
+              severity="success"
+              sx={{ mb: 3, fontSize: "1.1rem", "& .MuiAlert-icon": { fontSize: "1.5rem" } }}
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  variant="outlined"
+                  onClick={() => navigate("/clients")}
+                  sx={{ borderRadius: 2, textTransform: "none" }}
+                >
+                  View Clients List
+                </Button>
+              }
+              onClose={() => setSuccessMessage("")}
             >
+              {successMessage}
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", width: "100%" }} noValidate>
+            {/* Personal Info */}
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: "#374151", textTransform: "uppercase", letterSpacing: 0.6 }}>
               Account & Contact Person
             </Typography>
-
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-                gap: 2,
-              }}
-            >
-              <TextField
-                fullWidth
-                label="Username"
-                name="username"
-                value={form.username}
-                onChange={handleChange}
-                error={!!errors.username}
-                helperText={errors.username}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <AccountCircle color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="Email Address"
-                name="email"
-                type="email"
-                value={form.email}
-                onChange={handleChange}
-                error={!!errors.email}
-                helperText={errors.email}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Email color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="Full Name"
-                name="fullname"
-                value={form.fullname}
-                onChange={handleChange}
-                error={!!errors.fullname}
-                helperText={errors.fullname}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <PersonIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="Last Name"
-                name="lastname"
-                value={form.lastname}
-                onChange={handleChange}
-                error={!!errors.lastname}
-                helperText={errors.lastname}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <PersonIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="Password"
-                name="password"
-                type="password"
-                value={form.password}
-                onChange={handleChange}
-                error={!!errors.password}
-                helperText={errors.password}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Lock color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="Confirm Password"
-                name="confirmPassword"
-                type="password"
-                value={form.confirmPassword}
-                onChange={handleChange}
-                error={!!errors.confirmPassword}
-                helperText={errors.confirmPassword}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Lock color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
+              <TextField name="username" label="Username" value={form.username} onChange={handleChange} error={!!errors.username} helperText={errors.username} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><AccountCircle color="action" /></InputAdornment> }} />
+              <TextField name="email" label="Email Address" type="email" value={form.email} onChange={handleChange} error={!!errors.email} helperText={errors.email} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Email color="action" /></InputAdornment> }} />
+              <TextField name="fullname" label="First Name" value={form.fullname} onChange={handleChange} error={!!errors.fullname} helperText={errors.fullname} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><PersonIcon color="action" /></InputAdornment> }} />
+              <TextField name="lastname" label="Last Name" value={form.lastname} onChange={handleChange} error={!!errors.lastname} helperText={errors.lastname} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><PersonIcon color="action" /></InputAdornment> }} />
+              <TextField name="password" label="Password" type="password" value={form.password} onChange={handleChange} error={!!errors.password} helperText={errors.password} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Lock color="action" /></InputAdornment> }} />
+              <TextField name="confirmPassword" label="Confirm Password" type="password" value={form.confirmPassword} onChange={handleChange} error={!!errors.confirmPassword} helperText={errors.confirmPassword} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Lock color="action" /></InputAdornment> }} />
             </Box>
 
             <Divider sx={{ my: 3 }} />
 
-            {/* Section 2 */}
-            <Typography
-              variant="subtitle2"
-              sx={{
-                fontWeight: 700,
-                mb: 1,
-                color: "#374151",
-                textTransform: "uppercase",
-                letterSpacing: 0.6,
-              }}
-            >
+            {/* Company Info */}
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: "#374151", textTransform: "uppercase", letterSpacing: 0.6 }}>
               Company Details & Address
             </Typography>
-
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-                gap: 2,
-              }}
-            >
-              <TextField
-                fullWidth
-                label="Company Name"
-                name="company"
-                value={form.company}
-                onChange={handleChange}
-                error={!!errors.company}
-                helperText={errors.company}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Business color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="Tel"
-                name="tel"
-                value={form.tel}
-                onChange={handleChange}
-                error={!!errors.tel}
-                helperText={errors.tel}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Phone color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="Cell"
-                name="cell"
-                value={form.cell}
-                onChange={handleChange}
-                error={!!errors.cell}
-                helperText={errors.cell}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <PhoneAndroid color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="Street Address"
-                name="street"
-                value={form.street}
-                onChange={handleChange}
-                error={!!errors.street}
-                helperText={errors.street}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Home color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <FormControl
-                fullWidth
-                error={!!errors.province}
-                sx={commonFieldSx}
-              >
-                <InputLabel id="province-label">Province</InputLabel>
-                <Select
-                  labelId="province-label"
-                  label="Province"
-                  name="province"
-                  value={form.province}
-                  onChange={handleChange}
-                >
-                  {SOUTH_AFRICAN_PROVINCES.map((p) => (
-                    <MenuItem key={p} value={p}>
-                      {p}
-                    </MenuItem>
-                  ))}
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
+              <TextField name="company" label="Company Name" value={form.company} onChange={handleChange} error={!!errors.company} helperText={errors.company} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Business color="action" /></InputAdornment> }} />
+              <TextField name="tel" label="Telephone" value={form.tel} onChange={handleChange} error={!!errors.tel} helperText={errors.tel} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Phone color="action" /></InputAdornment> }} />
+              <TextField name="cell" label="Cellphone" value={form.cell} onChange={handleChange} error={!!errors.cell} helperText={errors.cell} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><PhoneAndroid color="action" /></InputAdornment> }} />
+              <TextField name="street" label="Street Address" value={form.street} onChange={handleChange} error={!!errors.street} helperText={errors.street} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Home color="action" /></InputAdornment> }} />
+              
+              <FormControl fullWidth error={!!errors.province} sx={commonFieldSx}>
+                <InputLabel>Province</InputLabel>
+                <Select name="province" value={form.province} onChange={handleChange} label="Province">
+                  {SOUTH_AFRICAN_PROVINCES.map((p) => <MenuItem key={p} value={p}>{p}</MenuItem>)}
                 </Select>
-                {errors.province && (
-                  <Typography
-                    variant="caption"
-                    color="error"
-                    sx={{ mt: 0.5, ml: 1 }}
-                  >
-                    {errors.province}
-                  </Typography>
-                )}
+                {errors.province && <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1 }}>{errors.province}</Typography>}
               </FormControl>
 
               {form.province === "Mpumalanga" ? (
                 <>
-                  <FormControl
-                    fullWidth
-                    error={!!errors.town}
-                    sx={commonFieldSx}
-                  >
-                    <InputLabel id="town-label">Town</InputLabel>
-                    <Select
-                      labelId="town-label"
-                      label="Town"
-                      name="town"
-                      value={form.town}
-                      onChange={handleChange}
-                    >
-                      {MPUMALANGA_TOWNS.map((t) => (
-                        <MenuItem key={t} value={t}>
-                          {t}
-                        </MenuItem>
-                      ))}
+                  <FormControl fullWidth error={!!errors.town} sx={commonFieldSx}>
+                    <InputLabel>Town</InputLabel>
+                    <Select name="town" value={form.town} onChange={handleChange} label="Town">
+                      {MPUMALANGA_TOWNS.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
                     </Select>
-                    {errors.town && (
-                      <Typography
-                        variant="caption"
-                        color="error"
-                        sx={{ mt: 0.5, ml: 1 }}
-                      >
-                        {errors.town}
-                      </Typography>
-                    )}
+                    {errors.town && <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1 }}>{errors.town}</Typography>}
                   </FormControl>
-
                   {form.town === "Other" && (
-                    <TextField
-                      fullWidth
-                      label="Custom Town"
-                      name="customTown"
-                      value={form.customTown}
-                      onChange={handleChange}
-                      sx={commonFieldSx}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <LocationIcon color="action" />
-                          </InputAdornment>
-                        ),
-                      }}
-                    />
+                    <TextField name="customTown" label="Custom Town" value={form.customTown} onChange={handleChange} sx={commonFieldSx}
+                      InputProps={{ startAdornment: <InputAdornment position="start"><LocationIcon color="action" /></InputAdornment> }} />
                   )}
                 </>
               ) : (
-                <TextField
-                  fullWidth
-                  label="Town"
-                  name="town"
-                  value={form.town}
-                  onChange={handleChange}
-                  error={!!errors.town}
-                  helperText={errors.town}
-                  sx={commonFieldSx}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <LocationIcon color="action" />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
+                <TextField name="town" label="Town" value={form.town} onChange={handleChange} error={!!errors.town} helperText={errors.town} sx={commonFieldSx}
+                  InputProps={{ startAdornment: <InputAdornment position="start"><LocationIcon color="action" /></InputAdornment> }} />
               )}
 
-              <TextField
-                fullWidth
-                label="Postal Code"
-                name="postalcode"
-                value={form.postalcode}
-                onChange={handleChange}
-                error={!!errors.postalcode}
-                helperText={errors.postalcode}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <PinDrop color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="Company Reg. No"
-                name="reg"
-                value={form.reg}
-                onChange={handleChange}
-                error={!!errors.reg}
-                helperText={errors.reg}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Business color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="VAT No"
-                name="vat"
-                value={form.vat}
-                onChange={handleChange}
-                error={!!errors.vat}
-                helperText={errors.vat}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Business color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="Number of Interns"
-                name="noi"
-                value={form.noi}
-                onChange={handleChange}
-                error={!!errors.noi}
-                helperText={errors.noi}
-                sx={commonFieldSx}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Groups color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
+              <TextField name="postalcode" label="Postal Code" value={form.postalcode} onChange={handleChange} error={!!errors.postalcode} helperText={errors.postalcode} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><PinDrop color="action" /></InputAdornment> }} />
+              <TextField name="reg" label="Company Reg. No" value={form.reg} onChange={handleChange} error={!!errors.reg} helperText={errors.reg} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Business color="action" /></InputAdornment> }} />
+              <TextField name="vat" label="VAT No" value={form.vat} onChange={handleChange} error={!!errors.vat} helperText={errors.vat} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Business color="action" /></InputAdornment> }} />
+              <TextField name="noi" label="Number of Interns" value={form.noi} onChange={handleChange} error={!!errors.noi} helperText={errors.noi} sx={commonFieldSx}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Groups color="action" /></InputAdornment> }} />
             </Box>
 
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "flex-end",
-                mt: 3,
-              }}
-            >
+            <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3 }}>
               <Button
                 type="submit"
                 variant="contained"
@@ -693,17 +362,11 @@ function ClientForm() {
                   textTransform: "none",
                   borderRadius: 999,
                   bgcolor: "#111827",
-                  "&:hover": {
-                    bgcolor: "#020617",
-                  },
+                  "&:hover": { bgcolor: "#020617" },
                 }}
-                endIcon={
-                  submitting ? (
-                    <CircularProgress color="inherit" size={20} />
-                  ) : null
-                }
+                endIcon={submitting ? <CircularProgress color="inherit" size={20} /> : null}
               >
-                {submitting ? "Submitting..." : "Create Company"}
+                {submitting ? "Creating..." : "Create Company"}
               </Button>
             </Box>
           </form>

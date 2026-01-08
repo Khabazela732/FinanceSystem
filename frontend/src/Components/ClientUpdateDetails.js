@@ -199,7 +199,7 @@ export default function ClientUpdateCompany() {
               fontWeight: 600,
               "&:hover": { color: "#1565c0" },
             }}
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate("/clients/dashboard/27")}
           >
             Dashboard
           </Link>
@@ -211,9 +211,9 @@ export default function ClientUpdateCompany() {
               fontWeight: 600,
               "&:hover": { color: "#1565c0" },
             }}
-            onClick={() => navigate("/clients")}
+            onClick={() => navigate("/clients/dashboard/27")}
           >
-            Clients
+            Invoices
           </Link>
           <Typography sx={{ fontWeight: 600, color: darkText }}>
             Update Company

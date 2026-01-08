@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import logo from "../assets/clean.png";
 import {
-  Box, Typography, Paper, TextField, Button, Container, Alert, Stack, Chip
+  Box, Typography, Paper, TextField, Button, Container, Alert, Stack, Chip, CircularProgress
 } from "@mui/material";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
@@ -25,7 +25,11 @@ export default function ClientLogin() {
       return;
     }
     setLoading(true);
+    setError("");
+    
     try {
+      console.log("🚀 Attempting client login:", form.email);
+      
       const res = await axios.post(
         "http://localhost:3001/api/clients/login",
         {
@@ -37,16 +41,34 @@ export default function ClientLogin() {
         }
       );
 
-      if (res.status === 200 && res.data.userId) {
-        navigate(`/clients/dashboard/${res.data.userId}`);
+      console.log("📡 Login response:", res.data);
+
+      // ✅ FIXED: Server returns clientId, NOT userId
+      if (res.status === 200 && (res.data.clientId || res.data.id)) {
+        const clientId = res.data.clientId || res.data.id;
+        const company = res.data.company || "Client";
+        
+        console.log(`✅ CLIENT LOGGED IN: ${company} (${clientId})`);
+        localStorage.setItem("clientId", clientId); // Backup storage
+        
+        // ✅ CORRECT ROUTE with clientId
+        navigate(`/clients/dashboard/${clientId}`);
       } else {
-        setError("Login failed. Please check your credentials.");
+        setError("Login failed. Server response invalid.");
       }
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-        "Login failed. Please check your credentials."
-      );
+      console.error("❌ Login error:", err.response?.data || err.message);
+      
+      if (err.response?.status === 401) {
+        setError("Invalid email or password.");
+      } else if (err.code === 'ECONNREFUSED') {
+        setError("Server not running. Check localhost:3001");
+      } else {
+        setError(
+          err?.response?.data?.message ||
+          "Login failed. Please check your credentials."
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -98,18 +120,6 @@ export default function ClientLogin() {
               }} 
             />
           </Stack>
-
-          <Typography 
-            variant="h6" 
-            sx={{ 
-              color: "#666", 
-              mb: 6, 
-              textAlign: "center",
-              fontWeight: 500
-            }}
-          >
-           
-          </Typography>
 
           {/* Login Form */}
           <Box component="form" onSubmit={handleSubmit} sx={{ width: "100%", maxWidth: 400 }}>
@@ -173,7 +183,7 @@ export default function ClientLogin() {
               type="submit"
               fullWidth
               variant="contained"
-              disabled={loading}
+              disabled={loading || !form.email || !form.password}
               sx={{
                 py: 1.5,
                 fontSize: "1rem",
@@ -191,7 +201,14 @@ export default function ClientLogin() {
                 }
               }}
             >
-              {loading ? "Logging in..." : "Sign In"}
+              {loading ? (
+                <>
+                  <CircularProgress size={20} sx={{ mr: 1, color: "white" }} />
+                  Logging in...
+                </>
+              ) : (
+                "Sign In"
+              )}
             </Button>
           </Box>
 
@@ -201,6 +218,7 @@ export default function ClientLogin() {
               variant="outlined"
               startIcon={<ArrowBackIcon />}
               onClick={() => navigate("/")}
+              disabled={loading}
               sx={{
                 fontWeight: 500,
                 borderColor: "#666",
@@ -217,6 +235,7 @@ export default function ClientLogin() {
             </Button>
             <Button
               onClick={() => navigate("/PasswordReset")}
+              disabled={loading}
               sx={{
                 fontWeight: 700,
                 color: "#1976d2",
@@ -235,4 +254,4 @@ export default function ClientLogin() {
       </Container>
     </Box>
   );
-}
+};
