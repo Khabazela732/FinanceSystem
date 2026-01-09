@@ -409,7 +409,7 @@ app.get("/api/clients", authenticateAdmin, async (req, res) => {
     res.status(500).json({ success: false, error: "Database error" });
   }});
 //NEW! FULL CLIENT DETAILS for modals - ADD THIS!
-app.get("/api/clients/:id/details", authenticateAdmin, async (req, res) => {
+app.get("/api/clients/:id/details", async (req, res) => {
   try {const clientId = parseInt(req.params.id);
     if (isNaN(clientId)) {
       return res.status(400).json({ success: false, message: "Invalid client ID" });}
@@ -660,7 +660,7 @@ app.post('/api/invoices', authenticateAdmin, async (req, res) => {
   }
 });
 // 🚀 ✅ FIXED! LIST INVOICES - BULLETPROOF
-app.get('/api/invoices', authenticateAdmin, async (req, res) => {
+app.get('/api/invoices', authenticateClient, async (req, res) => {
   try {
     const invoices = await safeQuery(`SELECT i.*, he.company, he.fullname, he.email 
       FROM invoices i
@@ -673,7 +673,7 @@ app.get('/api/invoices', authenticateAdmin, async (req, res) => {
   }
 });
 // 🚀 ✅ SINGLE INVOICE DETAILS - FIXES "Failed to load full invoice details"
-app.get('/api/invoices/:id', authenticateAdmin, async (req, res) => {
+app.get('/api/invoices/:id', authenticateClient, async (req, res) => {
   try {
     const invoiceId = parseInt(req.params.id);
     if (isNaN(invoiceId)) {
