@@ -1,4 +1,3 @@
-//COMPLETE FIXED server.js - CLIENT CREATION + AUTO EMAILS + PASSWORD RESET + SINGLE NOTIFICATION MARKING!
 require('dotenv').config();
 const express = require("express");
 const mysql = require("mysql2/promise");
@@ -13,9 +12,10 @@ const crypto = require("crypto");
 const cloudinary = require("cloudinary").v2;
 const app = express();
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:3000";
-const CLIENT_PORTAL_URL = process.env.CLIENT_PORTAL_URL || "http://localhost:3000/client-portal";
+const CLIENT_PORTAL_URL = process.env.CLIENT_PORTAL_URL || "http://localhost:3000/clients/login";
 const PORT = process.env.PORT || 3001;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "mkhizesenzo732@gmail.com";
+
 // Middleware
 app.use(cors({ origin: FRONTEND_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
@@ -39,15 +39,37 @@ function authenticateAdmin(req, res, next) {
 }}
 function authenticateClient(req, res, next) {
   try {
-    if (req.session?.clientId) {
-      req.clientId = req.session.clientId;
+    console.log('🔍 Auth Debug:', {
+      sessionExists: !!req.session,
+      clientId: req.session?.clientId,
+      userId: req.session?.userId,
+      sessionId: req.sessionID?.slice(0, 8) + '...'
+    });
+
+    // Check BOTH possible session keys (flexible)
+    if (req.session?.clientId || req.session?.userId) {
+      req.clientId = req.session.clientId || req.session.userId;
+      req.userId = req.session.userId || req.session.clientId;
+      console.log('Client authenticated:', req.clientId);
       return next();
     }
-    return res.status(401).json({ success: false, message: "Client authentication required" });
+
+    console.log('No valid session - 401');
+    return res.status(401).json({ 
+      success: false, 
+      message: "Client authentication required - please login",
+      debug: {
+        hasSession: !!req.session,
+        clientId: req.session?.clientId,
+        userId: req.session?.userId
+      }
+    });
   } catch (error) {
     console.error("Client auth error:", error);
-    res.status(500).json({ success: false, message: "Auth error" });
-  }}
+    res.status(500).json({ success: false, message: "Authentication server error" });
+  }
+}
+
 function isAuthenticated(req, res, next) {
   try {
     if (req.session && (req.session.userId || req.session.clientId)) {req.userId = req.session.userId || req.session.clientId;req.isAdmin = !!req.session.userId;req.isClient = !!req.session.clientId;req.clientId = req.session.clientId;
@@ -73,7 +95,7 @@ async function initDb() {
     process.exit(1);
   }
 }
-// ✅ UTILITY: BULLETPROOF DB QUERY
+//UTILITY: BULLETPROOF DB QUERY
 async function safeQuery(query, params = []) {
   try {
     if (!dbPool) {
@@ -82,14 +104,149 @@ async function safeQuery(query, params = []) {
     const [rows] = await dbPool.execute(query, params);
     return rows || [];
   } catch (error) {
-    console.error("🚨 DB Query FAILED:", error.message);
+    console.error("DB Query FAILED:", error.message);
     console.error("Query:", query);
     console.error("Params:", params);
     throw error;
   }
 }
 
-// ================= ADMIN REGISTER =================
+// Generate 6-digit OTP
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// PDF Generation - Enterprise Grade
+const puppeteer = require('puppeteer');
+
+async function generateInvoicePDF(invoice) {
+  const browser = await puppeteer.launch({ 
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+  
+  const page = await browser.newPage();
+  
+  await page.setContent(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Invoice #${invoice.invoice_number}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+    
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 3px solid #3166AE; }
+    .logo { font-size: 28px; font-weight: 700; color: #3166AE; }
+    .invoice-meta { text-align: right; }
+    .invoice-number { font-size: 24px; font-weight: 700; color: #3166AE; margin-bottom: 5px; }
+    
+    .client-section { display: flex; justify-content: space-between; margin-bottom: 40px; }
+    .company-info, .client-info { width: 48%; background: #f8f9fa; padding: 20px; border-radius: 8px; }
+    
+    .table-container { margin-bottom: 30px; overflow: hidden; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th { background: #3166AE; color: white; padding: 18px 12px; text-align: left; font-weight: 600; }
+    td { padding: 16px 12px; border-bottom: 1px solid #eee; }
+    .amount { text-align: right; font-weight: 600; }
+    
+    .totals { background: #f8f9fa; padding: 20px; border-radius: 8px; }
+    .total-row { display: flex; justify-content: flex-end; margin-bottom: 8px; font-size: 16px; }
+    .total-amount { font-size: 28px; font-weight: 700; color: #3166AE; }
+    
+    .payment-info { background: #e8f4f8; padding: 20px; border-radius: 8px; margin-top: 30px; }
+    .status { display: inline-block; padding: 8px 16px; border-radius: 20px; color: white; font-weight: 600; 
+      ${invoice.status === 'paid' ? 'background: #28a745;' : 'background: #ffc107; color: #212529;'}
+    }
+    
+    .footer { margin-top: 40px; text-align: center; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px; }
+    @media print { body { padding: 20px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">Internship Success</div>
+    <div class="invoice-meta">
+      <div class="invoice-number">#${invoice.invoice_number}</div>
+      <div>Date: ${new Date(invoice.invoice_date).toLocaleDateString('en-ZA')}</div>
+      <div>Due: ${new Date(invoice.due_date).toLocaleDateString('en-ZA')}</div>
+      <span class="status">${invoice.status.toUpperCase()}</span>
+    </div>
+  </div>
+
+  <div class="client-section">
+    <div class="company-info">
+      <h3>FROM:</h3>
+      <strong>Internship Success</strong><br>
+      1st Floor,Shell House,<br>
+      Ferreira Street, Mbombela<br>
+      South Africa, 1200<br>
+      Email: mkhizesenzo732@gmail.com<br>
+      Tel: +27 11 123 4567
+    </div>
+    <div class="client-info">
+      <h3>BILL TO:</h3>
+      <strong>${invoice.company_name}</strong><br>
+      ${invoice.customer_reference || 'N/A'}<br>
+      Client ID: ${invoice.client_id}
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Professional Services - ${invoice.customer_reference || 'General'}</strong></td>
+          <td class="amount">R ${invoice.amount?.toLocaleString()}</td>
+        </tr>
+        <tr style="background: #f8f9fa;">
+          <td>Balance Due</td>
+          <td class="amount">R ${invoice.amount_due?.toLocaleString()}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="totals">
+    <div class="total-row">
+      <span>Total Amount Due:</span>
+      <span class="total-amount">R ${invoice.amount_due?.toLocaleString()}</span>
+    </div>
+  </div>
+
+  <div class="payment-info">
+    <h4>Payment Instructions:</h4>
+    <p><strong>Bank:</strong> FNB | <strong>Acc:</strong> 123456789012<br>
+    <strong>Ref:</strong> ${invoice.invoice_number}<br>
+    <strong>Due:</strong> ${new Date(invoice.due_date).toLocaleDateString('en-ZA')}</p>
+    <p>Please email proof of payment to: <strong>mkhizesenzo732@gmail.com</strong></p>
+  </div>
+
+  <footer class="footer">
+    <p>Regards | Internship Success © 2026</p>
+  </footer>
+</body>
+</html>
+  `, { waitUntil: 'networkidle0' });
+
+  const pdf = await page.pdf({
+    format: 'A4',
+    printBackground: true,
+    margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' }
+  });
+
+  await browser.close();
+  return pdf;
+}
+
+
 // ================= ADMIN REGISTER (FIXED) =================
 app.post("/api/signup", async (req, res) => {
   try {
@@ -155,13 +312,13 @@ app.post("/api/signup", async (req, res) => {
       }
     );
   } catch (error) {
-    console.error("🔥 REGISTER CRASH:", error);
+    console.error("REGISTER CRASH:", error);
     res.status(500).json({ message: "Server crashed" });
   }
 });
 
 //Cloudinary config
-console.log("🔍 Cloudinary config check:");
+console.log("  Cloudinary config check:");
 console.log("  Cloud name:", process.env.CLOUDINARY_CLOUD_NAME ? "✅ OK" : "❌ MISSING");
 console.log("  API Key:", process.env.CLOUDINARY_API_KEY ? "✅ OK" : "❌ MISSING");
 console.log("  API Secret:", process.env.CLOUDINARY_API_SECRET ? "✅ OK" : "❌ MISSING");
@@ -223,45 +380,26 @@ const upload = multer({
     }
   }
 });
-//NEW! CLIENT WELCOME EMAIL WITH TEMP PASSWORD + RESET LINK
+//NEW! CLIENT WELCOME EMAIL WITH TEMP PASSWORD
 async function sendClientWelcomeEmail(clientEmail, clientUsername, tempPassword, clientId, companyName) {
   try {
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    // Store reset token (expires in 24h) - CREATE TABLE IF NEEDED
-    await safeQuery(
-      `INSERT INTO password_resets (email, token, client_id, expires_at) 
-       VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 24 HOUR)) 
-       ON DUPLICATE KEY UPDATE token = ?, expires_at = DATE_ADD(NOW(), INTERVAL 24 HOUR)`,
-      [clientEmail, resetToken, clientId, resetToken]
-    );
-    const resetUrl = `${CLIENT_PORTAL_URL}/reset-password?token=${resetToken}&email=${encodeURIComponent(clientEmail)}`;
     await transporter.sendMail({
       from: process.env.EMAIL_USER || "mkhizesenzo732@gmail.com",
       to: clientEmail,
       subject: "Welcome to Internship Success Financial-System ClientPortal - Your Account Details",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #1976d2;">🎉 Welcome to Internship Success Financial-System ClientPortal!</h2>
+          <h2 style="color: #1976d2;">Welcome to Internship Success Financial Management System!</h2>
           <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3>📋 Your Account Details</h3>
+           <h4>Your Company Has Been Successfully registered, check below,</h4> 
+          <h3>📋 Your Account Details</h3>
             <p><strong>👤 Username:</strong> ${clientUsername}</p>
             <p><strong>📧 Email:</strong> ${clientEmail}</p>
             <p><strong>🔑 Temporary Password:</strong> 
-               <span style="color: #d32f2f; font-size: 1.1em; font-weight: bold;">${tempPassword}</span>
+               <span style="color: #d15555; font-size: 1.1em; font-weight: bold;">${tempPassword}</span>
             </p>
-            <p style="color: #d32f2f; font-weight: bold;">
-              ⚠️ Please change this password immediately after first login!
-            </p>
-          </div>
-
-          <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3>🔐 Quick Password Reset</h3>
-            <p>Click the button below to reset your password and access your client portal:</p>
-            <a href="${resetUrl}" style="background: #1976d2; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block; margin: 10px 0;">
-              Reset Password Now
-            </a>
-            <p style="font-size: 12px; color: #666;">
-              <em>This link expires in 24 hours</em>
+            <p style="color: #d65b5b; font-weight: bold;">
+              Please log in and change this password immediately!
             </p>
           </div>
 
@@ -273,7 +411,7 @@ async function sendClientWelcomeEmail(clientEmail, clientUsername, tempPassword,
           <hr style="margin: 30px 0;">
           <p style="color: #999; font-size: 12px;">
             Regards,<br>
-            Finance Portal Team
+            Internship Success
           </p>
         </div>`});
     console.log(`Welcome email sent to ${clientEmail}`);
@@ -282,30 +420,10 @@ async function sendClientWelcomeEmail(clientEmail, clientUsername, tempPassword,
     throw error;
   }
 }
-//NEW! PASSWORD RESET ENDPOINT
-app.post('/api/clients/reset-password', async (req, res) => {
-  try {const { email, token, newPassword } = req.body;
-    if (!email || !token || !newPassword || newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: "Email, token, and password (6+ chars) required" });
-    }
-//Verify token + not expired
-    const resetRecord = await safeQuery("SELECT client_id FROM password_resets WHERE email = ? AND token = ? AND expires_at > NOW()",[email.toLowerCase(), token]
-    );
-    if (resetRecord.length === 0) {
-      return res.status(400).json({ success: false, message: "Invalid or expired reset token" });
-    }
-    const clientId = resetRecord[0].client_id;
-    const hashedPassword = await bcrypt.hash(newPassword, 12);
-// Update password
-    await safeQuery(
-      "UPDATE host_employers SET password = ? WHERE id = ? AND email = ?",[hashedPassword, clientId, email.toLowerCase()]);
-// Delete used token
-    await safeQuery("DELETE FROM password_resets WHERE email = ? AND token = ?", [email.toLowerCase(), token]);
-    console.log(`Password reset for ${email} (Client ID: ${clientId})`);
-    res.json({success: true,message: "Password updated! You can now login to client portal." 
-    });
-  } catch (error) {console.error("Password reset error:", error);res.status(500).json({ success: false, message: "Password reset failed" });}
-});
+
+
+
+
 //PERFECTLY ALIGNED WITH ClientForm.js - SENDS WELCOME EMAIL!
 app.post('/api/clients', authenticateAdmin, async (req, res) => {
   try {console.log('Creating client - RAW BODY:', JSON.stringify(req.body, null, 2));
@@ -360,6 +478,34 @@ app.post("/api/clients/login", async (req, res) => {
       [email]);
     console.log(`📊 Found ${rows.length} matching users`);
     if (!rows.length) {console.log(`No user found for email: ${email}`);
+
+    //SECURITY: Don't reveal if email exists
+   app.get("/api/client/me", authenticateClient, async (req, res) => {
+  try {
+    const clientId = req.clientId;
+
+    const client = await safeQuery(
+      `SELECT 
+        company, fullname, lastname, email,
+        street, town, province, postalcode,
+        reg, vat, noi, tel, cell
+       FROM host_employers
+       WHERE id = ?`,
+      [clientId]
+    );
+
+    if (!client.length) {
+      return res.status(404).json({ message: "Client not found" });
+    }
+
+    res.json(client[0]);
+  } catch (error) {
+    console.error("Client profile fetch error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+ 
+
 //SECURITY: Don't reveal if email exists
       return res.status(401).json({ 
         success: false, 
@@ -373,10 +519,10 @@ app.post("/api/clients/login", async (req, res) => {
       });}
       //CRITICAL SECURITY FIX: Proper session regeneration
     req.session.regenerate(async (err) => {
-      if (err) {console.error("🚨 Session regenerate FAILED:", err);
+      if (err) {console.error("Session regenerate FAILED:", err);
         return res.status(500).json({ success: false, message: "Session creation failed"});
       }
-      // ✅ SET SECURE SESSION DATA
+      // SECURE SESSION DATA
       req.session.clientId = user.id;
       req.session.clientType = "client";
       req.session.clientEmail = user.email;
@@ -384,7 +530,7 @@ app.post("/api/clients/login", async (req, res) => {
       //SAVE SESSION (CRITICAL - prevents session loss)
       req.session.save(async (saveErr) => {
         if (saveErr) {
-          console.error("🚨 Session save FAILED:", saveErr);
+          console.error("Session save FAILED:", saveErr);
           return res.status(500).json({ 
             success: false, 
             message: "Session save failed" 
@@ -399,7 +545,101 @@ app.post("/api/clients/login", async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: "Login service temporarily unavailable" });}});
-//FIXED GET CLIENTS - Perfect for Clients.js display
+
+// ✅ FORGOT PASSWORD - OTP via EMAIL
+app.post('/api/clients/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    // Check if client exists
+    const clients = await safeQuery('SELECT fullname, lastname, company FROM host_employers WHERE email = ?', [email]);
+    if (clients.length === 0) {
+      return res.json({ success: false, message: 'Email not found' });
+    }
+    
+    const client = clients[0];
+    const clientName = `${client.fullname} ${client.lastname || ''}`.trim() || client.company;
+    
+    // Generate OTP + expiry (10 mins)
+    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    
+    // Store OTP
+    await safeQuery(
+      `INSERT INTO otp_tokens (email, otp, expires_at) VALUES (?, ?, ?) 
+       ON DUPLICATE KEY UPDATE otp = VALUES(otp), expires_at = VALUES(expires_at)`,
+      [email, otp, expiresAt]
+    );
+    
+    // Send beautiful OTP email
+    await transporter.sendMail({
+      from: `"Internship Success" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: '🔐 Password Reset OTP (Valid 1 hour )',
+      html: `
+        <div style="font-family: Arial; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #0e57a0;">Reset Your Password</h2>
+          <p>Hi <strong>${clientName}</strong>,</p>
+          <p>Use this <strong>6-digit verification code</strong> to reset your password:</p>
+          
+          <div style="background: linear-gradient(135deg, #0e57a0, #115293); 
+                      color: white; font-size: 36px; font-weight: bold; 
+                      text-align: center; padding: 25px; border-radius: 16px; 
+                      letter-spacing: 12px; margin: 30px 0; box-shadow: 0 12px 32px rgba(14,87,160,0.4);">
+            ${otp}
+          </div>
+          
+          <p><strong>This code expires in 1 hour.</strong></p>
+          <p>Enter it at: <a href="http://localhost:3000/clients/reset-password?email=${encodeURIComponent(email)}" 
+            style="background: #0e57a0; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;">
+            Reset Password →
+          </a></p>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 40px 0;">
+          <p style="color: #666; font-size: 14px;">Internship Success Team</p>
+        </div>
+      `
+    });
+    
+    res.json({ success: true, message: 'OTP sent to your email!' });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ success: false, message: 'Failed to send OTP' });
+  }
+});
+
+// ✅ OTP Verification & Password Reset
+app.post('/api/clients/verify-otp-reset', async (req, res) => {
+  try {
+    const { email, otp, password } = req.body;
+    
+    // Verify OTP
+    const tokens = await safeQuery(
+      'SELECT * FROM otp_tokens WHERE email = ? AND otp = ? AND expires_at > NOW()',
+      [email, otp]
+    );
+    
+    if (tokens.length === 0) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+    }
+    
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(password, 12);
+    
+    // Update client password
+    await safeQuery('UPDATE host_employers SET password = ? WHERE email = ?', [hashedPassword, email]);
+    
+    // Delete used OTP
+    await safeQuery('DELETE FROM otp_tokens WHERE email = ? AND otp = ?', [email, otp]);
+    
+    res.json({ success: true, message: 'Password reset successful!' });
+  } catch (error) {
+    console.error('OTP Reset Error:', error);
+    res.status(500).json({ success: false, message: 'Reset failed' });
+  }
+});
+
+//GET CLIENTS - Perfect for Clients.js display
 app.get("/api/clients", authenticateAdmin, async (req, res) => {
   try {const clients = await safeQuery(`SELECT id, username, fullname, lastname, company, email, cell, tel, created_at FROM host_employers ORDER BY created_at DESC`);
     console.log(`Sending ${clients.length} clients to frontend`);
@@ -408,7 +648,7 @@ app.get("/api/clients", authenticateAdmin, async (req, res) => {
     console.error("Clients fetch error:", error);
     res.status(500).json({ success: false, error: "Database error" });
   }});
-//NEW! FULL CLIENT DETAILS for modals - ADD THIS!
+//CLIENT DETAILS for modals 
 app.get("/api/clients/:id/details", async (req, res) => {
   try {const clientId = parseInt(req.params.id);
     if (isNaN(clientId)) {
@@ -418,10 +658,10 @@ app.get("/api/clients/:id/details", async (req, res) => {
     if (!client || client.length === 0) {
       return res.status(404).json({ success: false, message: "Client not found" });
     }
-    console.log(`✅ Full details for client ${clientId}: ${client[0].company}`);
+    console.log(`Full details for client ${clientId}: ${client[0].company}`);
     res.json(client[0]);
   } catch (error) {
-    console.error("🚨 Client details error:", error);
+    console.error("Client details error:", error);
     res.status(500).json({ success: false, error: "Database error" });}});
 //UPDATE CLIENT - ADD THIS ENDPOINT!
 app.put("/api/clients/:id", authenticateAdmin, async (req, res) => {
@@ -429,7 +669,7 @@ app.put("/api/clients/:id", authenticateAdmin, async (req, res) => {
     if (isNaN(clientId)) {
       return res.status(400).json({ success: false, message: "Invalid client ID" });}
     const updateData = req.body;
-// ✅ Build dynamic UPDATE query for ALL fields
+// Build dynamic UPDATE query for ALL fields
     const fields = [];
     const values = [];
     if (updateData.fullname !== undefined) { fields.push("fullname = ?"); values.push(updateData.fullname); }
@@ -453,7 +693,7 @@ app.put("/api/clients/:id", authenticateAdmin, async (req, res) => {
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: "Client not found" });}
-console.log(`✅ Updated client ${clientId}: ${updateData.company || 'Unnamed'}`);
+console.log(`Updated client ${clientId}: ${updateData.company || 'Unnamed'}`);
     res.json({ 
       success: true, 
       message: "Client updated successfully",
@@ -463,6 +703,82 @@ console.log(`✅ Updated client ${clientId}: ${updateData.company || 'Unnamed'}`
     res.status(500).json({ success: false, error: "Database error" });
 }
 });
+
+// ==============================
+// CLIENT SELF-SERVICE ROUTES
+// ==============================
+
+// 1. GET logged-in client profile - /api/client/me
+app.get("/api/client/me", async (req, res) => {
+  try {
+    if (!req.session?.clientId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const clientId = req.session.clientId;
+    const client = await safeQuery(
+      "SELECT * FROM host_employers WHERE id = ?",
+      [clientId]
+    );
+
+    if (!client.length) {
+      return res.status(404).json({ message: "Client not found" });
+    }
+
+    res.json(client[0]);
+  } catch (err) {
+    console.error("GET /api/client/me error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// 2. UPDATE logged-in client profile - /api/client/me  
+app.put("/api/client/me", authenticateClient, async (req, res) => {
+  try {
+    const clientId = req.clientId;
+    
+    // Dynamic field updates (safe)
+    const fields = [];
+    const values = [];
+    const allowedFields = [
+      "company", "fullname", "lastname", "email", 
+      "street", "town", "province", "postalcode", 
+      "reg", "vat", "noi", "tel", "cell"
+    ];
+    for (const key of allowedFields) {
+      if (req.body[key] !== undefined) {
+        fields.push(`${key} = ?`);
+        values.push(req.body[key]);
+      }
+    }
+    if (!fields.length) {
+      return res.status(400).json({ message: "No fields to update" });
+    }
+    values.push(clientId);
+    
+    await safeQuery(
+      `UPDATE host_employers SET ${fields.join(", ")} WHERE id = ?`,
+      values
+    );
+    // Notify admin
+    const [updatedClient] = await safeQuery("SELECT company FROM host_employers WHERE id = ?", [clientId]);
+    await sendEmail(
+      ADMIN_EMAIL,
+      "Client Updated Profile", 
+      `${updatedClient.company} updated their profile`
+    );
+    await safeQuery(
+      "INSERT INTO notifications (type, message) VALUES (?, ?)",
+      ["CLIENT_UPDATE", `${updatedClient.company} updated profile`]
+    );
+
+    res.json({ success: true, message: "Profile updated successfully" });
+  } catch (error) {
+    console.error("PUT /api/client/me error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 //FIXED UPLOAD - NO PROMISE REJECTIONS - PDF + IMAGES PERFECT!
 app.post('/api/proofs/upload', upload.single('proofFile'), async (req, res) => {
   console.log('📁 Upload attempt...'); 
@@ -513,7 +829,7 @@ app.post('/api/proofs/upload', upload.single('proofFile'), async (req, res) => {
     // Admin notification
     await safeQuery(
       "INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())",
-      [`🔥 NEW PROOF from ${clients[0].company} (${clientId}): ${uploadResult.secure_url}`, ADMIN_EMAIL]
+      [`NEW PROOF from ${clients[0].company} (${clientId}): ${uploadResult.secure_url}`, ADMIN_EMAIL]
     );
 
     // Safe email to admin
@@ -521,7 +837,7 @@ app.post('/api/proofs/upload', upload.single('proofFile'), async (req, res) => {
       await transporter.sendMail({
         from: process.env.EMAIL_USER,
         to: ADMIN_EMAIL,
-        subject: `🔔 URGENT: New Proof from ${clients[0].company}`,
+        subject: `URGENT: New Proof from ${clients[0].company}`,
         html: `
           <h2>New Payment Proof Uploaded!</h2>
           <p><strong>Client:</strong> ${clients[0].company} (${clientId})</p>
@@ -551,11 +867,12 @@ app.post('/api/proofs/upload', upload.single('proofFile'), async (req, res) => {
   }
 });
 
-//FIXED: DRAFT vs SENT - NOW SENDS EMAILS CORRECTLY!
-app.post('/api/invoices', authenticateAdmin, async (req, res) => {
+//DRAFT vs SENT SENDS EMAILS CORRECTLY!
+// ENTERPRISE INVOICE CREATION & ISSUING ENDPOINT
+app.post("/api/invoices", authenticateAdmin, async (req, res) => {
   try {
-    console.log('📄 Creating invoice:', req.body);
-    
+    console.log("📄 Invoice request received:", req.body);
+
     const {
       company_name,
       invoice_number,
@@ -565,146 +882,305 @@ app.post('/api/invoices', authenticateAdmin, async (req, res) => {
       due_date,
       amount,
       amount_due,
-      status // "draft" or "sent" from frontend buttons!
+      status // DRAFT | ISSUED | SENT
     } = req.body;
 
-    // 🚀 VALIDATE STATUS FROM FRONTEND BUTTONS
-    const validStatus = status === 'sent' ? 'sent' : 'draft';
-    console.log(`📋 Button clicked: ${status} → Saving as: ${validStatus}`);
+    // -----------------------------
+    // 1. VALIDATE STATUS (STRICT)
+    // -----------------------------
+    const allowedStatuses = ["draft","DRAFT", "ISSUED", "SENT", "sent"];
+    const finalStatus = allowedStatuses.includes(status)
+      ? status
+      : "DRAFT";
 
-    // 🚀 FAIL-FAST VALIDATION
-    if (!company_name?.trim()) return res.status(400).json({ success: false, message: "Company name required" });
-    if (!invoice_number?.trim()) return res.status(400).json({ success: false, message: "Invoice number required" });
-    if (!client_id || isNaN(Number(client_id))) return res.status(400).json({ success: false, message: "Valid client ID required" });
-    if (!invoice_date) return res.status(400).json({ success: false, message: "Invoice date required" });
-    if (!due_date) return res.status(400).json({ success: false, message: "Due date required" });
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return res.status(400).json({ success: false, message: "Valid amount required" });
+    // -----------------------------
+    // 2. BASIC VALIDATION
+    // -----------------------------
+    if (!company_name?.trim())
+      return res.status(400).json({ message: "Company name required" });
 
-    const clientIdNum = Number(client_id);
-    const amountNum = Number(amount);
-    const amountDueNum = Number(amount_due || amount);
+    if (!invoice_number?.trim())
+      return res.status(400).json({ message: "Invoice number required" });
 
-    // 🚀 CHECK DUPLICATE
-    const existing = await safeQuery("SELECT id FROM invoices WHERE invoice_number = ?", [invoice_number.trim()]);
-    if (existing.length > 0) {
-      return res.status(400).json({ success: false, message: "Invoice number already exists" });}
-//VERIFY CLIENT + GET EMAIL
-    const client = await safeQuery("SELECT id, company, email, fullname FROM host_employers WHERE id = ?", [clientIdNum]);
-    if (!client || client.length === 0) {
-      return res.status(404).json({ success: false, message: "Client not found" });}
-    const clientEmail = client[0].email;const clientCompany = client[0].company;const clientName = client[0].fullname;
-//MAIN INSERT - USES FRONTEND STATUS!
-    const result = await safeQuery(
-      `INSERT INTO invoices (company_name, invoice_number, customer_reference, client_id, invoice_date, due_date, amount, amount_due, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [company_name.trim(),invoice_number.trim(),customer_reference?.trim() || null,clientIdNum,invoice_date,due_date,amountNum,amountDueNum,validStatus]);const invoiceId = result.insertId;
-    // 🚀 ADMIN NOTIFICATION (ALWAYS)
-    await safeQuery(
-      "INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())",
-      [`💰 NEW ${validStatus.toUpperCase()} INVOICE #${invoice_number} for ${clientCompany}: R${amountNum.toLocaleString()}`, ADMIN_EMAIL]
+    if (!client_id || isNaN(client_id))
+      return res.status(400).json({ message: "Valid client ID required" });
+
+    if (!invoice_date)
+      return res.status(400).json({ message: "Invoice date required" });
+
+    if (!due_date)
+      return res.status(400).json({ message: "Due date required" });
+
+    if (!amount || Number(amount) <= 0)
+      return res.status(400).json({ message: "Valid invoice amount required" });
+
+    // -----------------------------
+    // 3. CHECK DUPLICATE INVOICE NUMBER
+    // -----------------------------
+    const duplicate = await safeQuery(
+      "SELECT id FROM invoices WHERE invoice_number = ?",
+      [invoice_number.trim()]
     );
-    // 🚀 ✅ CRITICAL FIX: SEND EMAIL ONLY FOR "sent" STATUS!
-    if (validStatus === 'sent') {
+
+    if (duplicate.length > 0) {
+      return res.status(409).json({ message: "Invoice number already exists" });
+    }
+
+    // -----------------------------
+    // 4. VERIFY CLIENT
+    // -----------------------------
+    const client = await safeQuery(
+      "SELECT id, company, email, fullname FROM host_employers WHERE id = ?",
+      [client_id]
+    );
+
+    if (!client.length) {
+      return res.status(404).json({ message: "Client not found" });
+    }
+
+    const clientEmail = client[0].email;
+    const clientCompany = client[0].company;
+    const clientName = client[0].fullname;
+
+    // -----------------------------
+    // 5. ISSUED TIMESTAMP RULE
+    // -----------------------------
+    const issuedAt =
+      finalStatus === "ISSUED" || finalStatus === "SENT"
+        ? new Date()
+        : null;
+
+    // -----------------------------
+    // 6. INSERT INVOICE (ENTERPRISE-SAFE)
+    // -----------------------------
+    const result = await safeQuery(
+  `
+  INSERT INTO invoices (
+    client_id, company_name, invoice_number, customer_reference,
+    invoice_date, due_date, amount, amount_due, status, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+  `,
+  [
+    client_id,                    // ← ADD THIS FIRST
+    company_name.trim(),
+    invoice_number.trim(),
+    customer_reference?.trim() || null,
+    invoice_date,
+    due_date,
+    Number(amount),
+    Number(amount_due || amount),
+    finalStatus
+  ]
+);
+
+    const invoiceId = result.insertId;
+
+    // -----------------------------
+    // 7. ADMIN AUDIT NOTIFICATION
+    // -----------------------------
+    await safeQuery(
+      `
+      INSERT INTO notifications (message, user_mail, viewed, created_at)
+      VALUES (?, ?, 0, NOW())
+      `,
+      [
+        `📄 INVOICE ${finalStatus}: #${invoice_number} for ${clientCompany} (R${Number(amount).toLocaleString()})`,
+        ADMIN_EMAIL
+      ]
+    );
+
+    // -----------------------------
+    // 8. EMAIL CLIENT ONLY IF SENT
+    // -----------------------------
+    if (finalStatus === "SENT" || finalStatus === "sent") {
       try {
-        // Send invoice to CLIENT
         await transporter.sendMail({
-          from: process.env.EMAIL_USER || "mkhizesenzo732@gmail.com",
+          from: process.env.EMAIL_USER,
           to: clientEmail,
-          subject: `📄 New Invoice #${invoice_number} - ${company_name}`,
+          subject: `Invoice Number:${invoice_number} Issued`,
           html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <h2 style="color: #1976d2;">📄 New Invoice Received</h2>
+            <div style="font-family: Arial; max-width: 600px; margin: auto;">
+              <h2 style="color:#1976d2;">Official Invoice Issued</h2>
               <p>Dear ${clientName || clientCompany},</p>
-              <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3>📋 Invoice Details</h3>
-                <p><strong>Invoice Number:</strong> ${invoice_number}</p>
-                <p><strong>From:</strong> ${company_name}</p>
-                <p><strong>Date:</strong> ${new Date(invoice_date).toLocaleDateString()}</p>
-                <p><strong>Due Date:</strong> ${new Date(due_date).toLocaleDateString()}</p>
-                <p><strong>Total Amount:</strong> <strong style="color: #1976d2; font-size: 1.2em;">R ${amountNum.toLocaleString()}</strong></p>
-                <p><strong>Amount Due:</strong> <strong style="color: #d32f2f;">R ${amountDueNum.toLocaleString()}</strong></p>
-              </div>
-              <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p><strong>💳 Payment Instructions:</strong></p>
-                <p>Login to your <a href="${CLIENT_PORTAL_URL}">Client Portal</a> to:</p>
-                <ul>
-                  <li>View full invoice details</li>
-                  <li>Upload payment proof</li>
-                  <li>Track payment status</li>
-                </ul>
-              </div>
-              <hr style="margin: 30px 0;">
-              <p>Best regards,<br>${company_name} Team</p>
-            </div>`});
-        console.log(`✅ EMAIL SENT to ${clientEmail} for invoice #${invoice_number}`);
-// ADMIN CONFIRMATION NOTIFICATION
+
+              <p>Your invoice <strong>${invoice_number}</strong> has been officially issued.</p>
+
+              <ul>
+                <li><strong>Invoice Date:</strong> ${new Date(invoice_date).toLocaleDateString()}</li>
+                <li><strong>Due Date:</strong> ${new Date(due_date).toLocaleDateString()}</li>
+                <li><strong>Amount Due:</strong> R ${Number(amount_due || amount).toLocaleString()}</li>
+              </ul>
+
+              <p>
+                Please log in to your
+                <a href="${CLIENT_PORTAL_URL}">Client Portal</a>
+                to view and manage this invoice.
+              </p>
+
+              <hr />
+              <p>${company_name}</p>
+            </div>
+          `
+        });
+
         await safeQuery(
-          "INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())",
-          [`📧 INVOICE SENT: #${invoice_number} → ${clientCompany} (${clientEmail}) - R${amountNum.toLocaleString()}`, ADMIN_EMAIL]
+          `
+          INSERT INTO notifications (message, user_mail, viewed, created_at)
+          VALUES (?, ?, 0, NOW())
+          `,
+          [
+            `📧 INVOICE SENT: #${invoice_number} → ${clientEmail}`,
+            ADMIN_EMAIL
+          ]
         );
-      } catch (emailError) {
-        console.error("🚨 EMAIL FAILED for invoice:", emailError.message);
-        // Don't fail the invoice creation if email fails
+      } catch (mailErr) {
+        console.error("🚨 Invoice email failed:", mailErr.message);
       }
     }
-    console.log(`✅ INVOICE CREATED: ID ${invoiceId} (${validStatus.toUpperCase()})`);
-    res.json({ 
-      success: true, 
-      message: `Invoice ${validStatus}d successfully!${validStatus === 'sent' ? ' Client notified via email.' : ''}`,
-      invoiceId: invoiceId,
-      status: validStatus
+
+    // -----------------------------
+    // 9. FINAL RESPONSE
+    // -----------------------------
+    res.json({
+      success: true,
+      invoiceId,
+      status: finalStatus,
+      message: `Invoice successfully ${finalStatus}`
     });
-  } catch (error) {
-    console.error("🚨 TOTAL INVOICE ERROR:", error);
-    res.status(500).json({ success: false, message: "Server error - please try again" });
+
+  } catch (err) {
+    console.error("🚨 Invoice creation error:", err);
+    res.status(500).json({ message: "Server error while creating invoice" });
   }
 });
-// 🚀 ✅ FIXED! LIST INVOICES - BULLETPROOF
-app.get('/api/invoices', authenticateClient, async (req, res) => {
-  try {
-    const invoices = await safeQuery(`SELECT i.*, he.company, he.fullname, he.email 
-      FROM invoices i
-      LEFT JOIN host_employers he ON i.client_id = he.id
-      ORDER BY i.created_at DESC`);
-    res.json(invoices || []);
-  } catch (error) {
-    console.error('Invoices error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch invoices' });
-  }
-});
-// 🚀 ✅ SINGLE INVOICE DETAILS - FIXES "Failed to load full invoice details"
+
+// FIXED! LIST INVOICES - BULLETPROOF
+
+
+// SINGLE INVOICE BY ID
 app.get('/api/invoices/:id', authenticateClient, async (req, res) => {
   try {
-    const invoiceId = parseInt(req.params.id);
-    if (isNaN(invoiceId)) {
-      return res.status(400).json({ success: false, message: "Invalid invoice ID" });
+    const invoiceId = req.params.id;
+    const clientId = req.clientId;
+    
+    console.log('Fetching invoice:', invoiceId, 'for client:', clientId);
+    
+    const [invoice] = await safeQuery(`
+      SELECT 
+        i.*,
+        he.company as client_company,
+        he.fullname as client_name
+      FROM invoices i
+      LEFT JOIN host_employers he ON i.client_id = he.id
+      WHERE i.id = ? AND i.client_id = ?
+    `, [invoiceId, clientId]);
+    
+    if (!invoice) {
+      return res.status(404).json({ message: 'Invoice not found' });
     }
-    console.log(`📄 Fetching invoice details: ID ${invoiceId}`);
-    const invoice = await safeQuery(`
-  SELECT 
-    i.*,
-    he.company  AS client_company,
-    he.fullname AS client_name,
-    he.email    AS client_email,
-    he.cell     AS client_cell
-  FROM invoices i
-  LEFT JOIN host_employers he ON i.client_id = he.id
-  WHERE i.id = ?
-  LIMIT 1
-`, [invoiceId]);
-;
-    if (!invoice || invoice.length === 0) {
-      return res.status(404).json({ success: false, message: "Invoice not found" });
-    }
-    const invoiceData = invoice[0];
-    console.log(`✅ Invoice found: ${invoiceData.invoice_number} (${invoiceData.status})`);
-    res.json(invoiceData);
+    
+    console.log('Invoice found:', invoice.invoice_number);
+    res.json(invoice);
   } catch (error) {
-    console.error('🚨 Invoice details error:', error);
-    res.status(500).json({ success: false, message: "Failed to load invoice details" });
+    console.error('Invoice fetch error:', error);
+    res.status(500).json({ message: 'Failed to fetch invoice' });
   }
 });
-// 🚀 ✅ NEW! SEND PAYMENT REMINDER - FIXES YOUR BUTTON!
+
+
+// ENTERPRISE INVOICE FETCH (ADMIN + CLIENT SAFE) - FIXED
+app.get("/api/invoices", isAuthenticated, async (req, res) => {
+  try {
+    console.log('🔍 === INVOICES DEBUG START ===');
+    console.log('🔍 req.isClient:', req.isClient);
+    console.log('🔍 req.clientId:', req.clientId);
+    
+    let invoices = [];
+
+    if (req.isClient) {
+      console.log('🔍 CLIENT MODE - clientId:', req.clientId);
+      
+      invoices = await safeQuery(
+        `
+        SELECT 
+          i.id,
+          i.invoice_number,
+          i.company_name,
+          i.invoice_date,
+          i.due_date,
+          i.amount,
+          i.amount_due,
+          i.status,
+          i.issued_at,
+          i.client_id
+        FROM invoices i
+        WHERE 
+          i.client_id = ?
+          AND i.status IN ('sent', 'SENT', 'ISSUED', 'PAID', 'OVERDUE', 'draft')
+        ORDER BY i.issued_at DESC
+        `,
+        [req.clientId]
+      );
+      
+      console.log('✅ CLIENT INVOICES:', invoices.length);
+      if (invoices.length > 0) {
+        console.log('🔍 FIRST INVOICE client_id:', invoices[0].client_id);
+      } else {
+        console.log('❌ NO INVOICES for client_id:', req.clientId);
+      }
+    }
+
+    if (req.isAdmin) {
+      console.log('🔍 ADMIN MODE');
+      invoices = await safeQuery(
+        `
+        SELECT 
+          i.*,
+          he.company AS client_company,
+          he.fullname AS client_name,
+          he.email AS client_email
+        FROM invoices i
+        LEFT JOIN host_employers he ON i.client_id = he.id
+        ORDER BY i.issued_at DESC
+        `
+      );
+      console.log('✅ ADMIN INVOICES:', invoices.length);
+    }
+
+    console.log('📤 SENDING:', invoices.length, 'invoices');
+    res.json(invoices || []);
+
+  } catch (error) {
+    console.error("🚨 INVOICE FETCH ERROR:", error);
+    res.status(500).json({ message: "Failed to fetch invoices" });
+  }
+});
+
+
+app.get('/api/invoices', authenticateClient, async (req, res) => {
+  try {
+    const clientId = req.user.id; // Gets client ID 39 from your auth middleware
+    
+    console.log(`🔍 Client ${clientId} fetching THEIR invoices only`);
+    
+    const invoices = await safeQuery(`
+      SELECT 
+        id, invoice_number, company_name, invoice_date, due_date,
+        amount, amount_due, status, created_at
+      FROM invoices 
+      WHERE client_id = ?
+      ORDER BY created_at DESC
+    `, [clientId]);
+    
+    console.log(`✅ Client ${clientId} has ${invoices.length} invoices`);
+    res.json(invoices);
+  } catch (error) {
+    console.error('Client invoices error:', error);
+    res.status(500).json({ success: false, message: 'Failed to load invoices' });
+  }
+});
+
+// NEW! SEND PAYMENT REMINDER - FIXES YOUR BUTTON!
 app.post('/api/reminders/payment/:invoiceId', authenticateAdmin, async (req, res) => {
   try {
     const invoiceId = parseInt(req.params.invoiceId);
@@ -733,20 +1209,20 @@ app.post('/api/reminders/payment/:invoiceId', authenticateAdmin, async (req, res
     await transporter.sendMail({
       from: process.env.EMAIL_USER || "mkhizesenzo732@gmail.com",
       to: inv.email,
-      subject: `⏰ ${isOverdue ? 'URGENT' : 'Friendly'} Payment Reminder: Invoice #${inv.invoice_number}`,
+      subject: `${isOverdue ? 'URGENT' : 'Friendly'} Payment Reminder: Invoice Number:${inv.invoice_number}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: ${isOverdue ? '#d32f2f' : '#1976d2'};">${isOverdue ? '⏰ URGENT PAYMENT REMINDER' : '💳 Payment Reminder'}</h2> 
+          <h2 style="color: ${isOverdue ? '#df4949' : '#1976d2'};">${isOverdue ? 'URGENT PAYMENT REMINDER' : 'Payment Reminder'}</h2> 
           <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h3>📄 Invoice Details</h3>
-            <p><strong>Invoice #:</strong> ${inv.invoice_number}</p>
+            <p><strong>Invoice:</strong> ${inv.invoice_number}</p>
             <p><strong>Client:</strong> ${inv.company}</p>
             <p><strong>Date:</strong> ${new Date(inv.invoice_date).toLocaleDateString()}</p>
             <p><strong>Due Date:</strong> ${new Date(inv.due_date).toLocaleDateString()}${isOverdue ? ` (OVERDUE ${daysOverdue} days)` : ''}</p>
             <p><strong>Amount Due:</strong> <span style="color: #d32f2f; font-size: 1.3em; font-weight: bold;">R ${parseFloat(inv.amount_due).toLocaleString()}</span></p>
           </div>
           <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p><strong>📱 Upload Payment:</strong></p>
+            <p>Upload Payment:</p>
             <p>Login to your <a href="${CLIENT_PORTAL_URL}">Client Portal</a> to upload payment proof.</p>
           </div>
           <hr style="margin: 30px 0;">
@@ -757,19 +1233,19 @@ app.post('/api/reminders/payment/:invoiceId', authenticateAdmin, async (req, res
     // Admin notification
     await safeQuery(
       "INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())",
-      [`📧 REMINDER SENT: Invoice #${inv.invoice_number} → ${inv.company} (R${inv.amount_due})`, ADMIN_EMAIL]
+      [`REMINDER SENT: Invoice Number:${inv.invoice_number} → ${inv.company} (R${inv.amount_due})`, ADMIN_EMAIL]
     );
-    console.log(`✅ Reminder sent for invoice #${inv.invoice_number} → ${inv.email}`);
+    console.log(`Reminder sent for invoice #${inv.invoice_number} → ${inv.email}`);
     res.json({ 
       success: true, 
       message: `Payment reminder sent to ${inv.company}!` 
     });
   } catch (error) {
-    console.error("🚨 Reminder error:", error);
+    console.error("Reminder error:", error);
     res.status(500).json({ success: false, message: "Failed to send reminder" });
   }
 });
-// 🚀 ✅ CLIENT PROOFS - ADMIN OR OWNER ONLY
+//CLIENT PROOFS - ADMIN OR OWNER ONLY
 app.get('/api/clients/:id/proofs', isAuthenticated, async (req, res) => {
   try {
     const clientId = parseInt(req.params.id); 
@@ -789,7 +1265,8 @@ app.get('/api/clients/:id/proofs', isAuthenticated, async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to fetch proofs' });
   }
 });
-// 🚀 ✅ ADMIN PROOFS LIST
+
+// ADMIN PROOFS LIST
 app.get("/api/payment-proofs", authenticateAdmin, async (req, res) => {
   try {
     const proofs = await safeQuery(`
@@ -804,7 +1281,7 @@ app.get("/api/payment-proofs", authenticateAdmin, async (req, res) => {
     res.status(500).json({ success: false, error: "Database error" });
   }
 });
-// 🚀 ✅ ADMIN LOGIN
+// ADMIN LOGIN
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -815,7 +1292,7 @@ app.post("/login", async (req, res) => {
     }
     req.session.userId = rows[0].id;
     req.session.userType = 'admin';
-    res.json({ success: true, message: "✅ Login successful", userId: rows[0].id });
+    res.json({ success: true, message: "Login successful", userId: rows[0].id });
   } catch (error) {
     res.status(500).json({ success: false, message: "Login failed" });
   }
@@ -829,7 +1306,7 @@ app.get("/api/notifications", authenticateAdmin, async (req, res) => {
     res.status(500).json({ success: false, error: "Database error" });
   }
 });
-// 🚀 ✅ MARK SINGLE NOTIFICATION AS READ - PERFECT FOR YOUR FRONTEND!
+//MARK SINGLE NOTIFICATION AS READ - PERFECT FOR YOUR FRONTEND!
 app.post("/api/notifications/:id/read", authenticateAdmin, async (req, res) => {
   try {
     const notificationId = parseInt(req.params.id); 
@@ -839,17 +1316,15 @@ app.post("/api/notifications/:id/read", authenticateAdmin, async (req, res) => {
     const result = await safeQuery("UPDATE notifications SET viewed = 1 WHERE id = ? AND user_mail = ?",[notificationId, ADMIN_EMAIL]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: "Notification not found" });
-    }
-    console.log(`✅ Notification ${notificationId} marked as read`);
-    res.json({ success: true, message: "Notification marked as read" }); 
+    } 
   } catch (error) {
-    console.error("🚨 Mark notification error:", error);
+    console.error("Mark notification error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }});
 //MARK ALL NOTIFICATIONS AS READ - OPTIONAL BACKUP
 app.post("/api/notifications/mark-all-read", authenticateAdmin, async (req, res) => {
   try {const result = await safeQuery("UPDATE notifications SET viewed = 1 WHERE user_mail = ? AND viewed = 0",[ADMIN_EMAIL]);
-    console.log(`✅ Marked ${result.affectedRows} notifications as read`);res.json({ success: true, message: `Marked ${result.affectedRows} notifications as read`,affectedRows: result.affectedRows });} catch (error) {console.error("🚨 Mark all notifications error:", error);res.status(500).json({ success: false, message: "Server error" });}});
+    console.log(`Marked ${result.affectedRows} notifications as read`);res.json({ success: true, message: `Marked ${result.affectedRows} notifications as read`,affectedRows: result.affectedRows });} catch (error) {console.error("Mark all notifications error:", error);res.status(500).json({ success: false, message: "Server error" });}});
 //HEALTH CHECK
 app.get("/health", async (req, res) => {
   try {await dbPool.execute("SELECT 1");
@@ -858,14 +1333,14 @@ app.get("/health", async (req, res) => {
 
     // Error handler - CATCHES ALL PROMISE REJECTIONS
 app.use((err, req, res, next) => {
-  console.error("🚨 Global error:", err.message);
+  console.error("Global error:", err.message);
   if (err.code === 'LIMIT_FILE_SIZE'){return res.status(400).json({ success: false, message: "File too large (max 10MB)" });}
   if (req.file){
     fs.unlink(req.file.path,() => {});}
   res.status(500).json({ success: false, message: "Internal server error" });});
 
   //Graceful shutdown
-process.on('SIGTERM', async () => {console.log('🛑 Shutting down gracefully...');
+process.on('SIGTERM', async () => {console.log('Shutting down gracefully...');
   if (dbPool) {
     await dbPool.end();}
   process.exit(0);});
@@ -873,6 +1348,6 @@ process.on('SIGTERM', async () => {console.log('🛑 Shutting down gracefully...
   //START SERVER
 async function startServer() {
   await initDb();
-  app.listen(PORT, () => {console.log(`📧 Admin: ${ADMIN_EMAIL}`);console.log(`🔗 CLIENT_PORTAL_URL: ${CLIENT_PORTAL_URL}`);console.log(`✅ COMPLETE FILE - SINGLE NOTIFICATION MARKING PERFECT!\n`);
+  app.listen(PORT, () => {console.log(`Admin: ${ADMIN_EMAIL}`);console.log(`🔗 CLIENT_PORTAL_URL: ${CLIENT_PORTAL_URL}`);console.log(`✅ COMPLETE FILE - SINGLE NOTIFICATION MARKING PERFECT!\n`);
   });}
 startServer().catch(console.error); 

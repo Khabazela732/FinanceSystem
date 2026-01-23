@@ -11,26 +11,28 @@ import {
 import "./App.css";
 import logo from "./assets/clean.png";
 
-import Signup from "./Components/SignUp";
-import Login from "./Components/Login";
-import Dashboard from "./Components/Dashboard";
-import Notifications from "./Components/Notifications";
-import ClientForm from "./Components/ClientForm";
-import Clients from "./Components/Clients";
-import InvoiceForm from "./Components/InvoiceForm";
-import Invoices from "./Components/Invoices";
-import ResetPassword from "./Components/ResetPassword";
-import ClientLogin from "./Components/ClientLoginPage";
-import ClientDashboard from "./Components/ClientDashboard";
-import UploadedProofs from "./Components/UploadedProofs";
-import ClientUpdateDetails from "./Components/ClientUpdateDetails"; 
-import AdminSettings from "./Components/AdminSettings";
-import ProofViewer from "./Components/ProofViewer";
+import Signup from "./admin/SignUp";
+import Login from "./admin/Login";
+import Dashboard from "./admin/Dashboard/Dashboard";
+import Notifications from "./admin/Dashboard/Notifications";
+import ClientForm from "./admin/Dashboard/ClientForm";
+import Clients from "./admin/Dashboard/Clients";
+import InvoiceForm from "./admin/Dashboard/Invoices/InvoiceForm";
+import Invoices from "./admin/Dashboard/Invoices/Invoices";
+import ResetPassword from './client/ResetPassword';
+import ClientLogin from "./client/ClientLoginPage";
+import ForgotPassword from './client/ForgotPassword';
+import ClientDashboard from "./client/Dashboard/ClientDashboard";
+import UploadedProofs from "./admin/Dashboard/UploadedProofs";
+import ClientProfileUpdate from "./client/Dashboard/ClientProfileUpdate"; 
+import AdminSettings from "./admin/Dashboard/AdminSettings";
+import ProofViewer from "./admin/Dashboard/Invoices/ProofViewer";
+import ClientProofUploadPage from './client/Dashboard/ClientProofUploadPage';
+import ClientInvoicesPage from './client/Dashboard/ClientInvoicesPage';
+import ClientPaymentPage from './client/Dashboard/ClientPaymentPage';
+<Route path="/client/invoices/:id" element={<ClientInvoicesPage />} />
 
-
-
-
-
+//System Landing Page
 function EntranceScreen() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -40,7 +42,7 @@ function EntranceScreen() {
     const timer = setTimeout(() => {
       setLoading(false);
       setTimeout(() => setContentVisible(true), 200);
-    }, 3200);
+    }, 1200);
     return () => clearTimeout(timer);
   }, []);
 
@@ -255,15 +257,19 @@ export default function App() {
   <Route path="/clients/new" element={<ClientForm />} />
   <Route path="/clients" element={<Clients />} />
   <Route path="/clients/login" element={<ClientLogin />} />
+  <Route path="/clients/forgot-password" element={<ForgotPassword />} />
   <Route path="/invoices" element={<Invoices />} />
   <Route path="/invoices/new" element={<InvoiceForm />} />
-  <Route path="/reset-password/:token" element={<ResetPassword />} />
+  <Route path="/clients/reset-password" element={<ResetPassword />} />
   <Route path="/clients/dashboard/:id" element={<ClientDashboard />} />
   <Route path="/uploaded-proofs" element={<UploadedProofs />} />
-  <Route path="/clients/update-company" element={<ClientUpdateDetails />} />
+  <Route path="/clients/ClientProfileUpdate" element={<ClientProfileUpdate />} />
   <Route path="/settings" element={<AdminSettings />} />
-  {/* NEW: Proof Viewer Route */}
   <Route path="/proofs/:id" element={<ProofViewer />} />
+  <Route path="/client/proof-upload/:id" element={<ClientProofUploadPage />} />
+  <Route path="/client/invoices/:id" element={<ClientInvoicesPage />} />
+  <Route path="/client/payments/:id" element={<ClientPaymentPage />} />
+
 </Routes>
 
   );
