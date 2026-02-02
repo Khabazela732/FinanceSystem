@@ -1,60 +1,88 @@
 import React, { useEffect, useState } from "react";
 import {
   Box,
-  Paper,
+  Card,
+  CardContent,
   Typography,
   TextField,
   Button,
   MenuItem,
   CircularProgress,
-  Grid,
   Snackbar,
   Alert,
   Backdrop,
-  Card,
-  CardContent,
+  Paper,
+  Divider,
+  InputAdornment,
+  IconButton,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import {
+  AccountCircle,
+  Business,
+  Email,
+  LocationOn as LocationIcon,
+  Phone,
+  PhoneAndroid,
+  Home,
+  PinDrop,
+  Groups,
+  ArrowBack as ArrowBackIcon,
+  Edit as EditIcon,
+  Save as SaveIcon,
+} from "@mui/icons-material";
 
 const API_BASE = "http://localhost:3001";
 
-export default function AdminSettings() {
+function AdminSettings() {
   const navigate = useNavigate();
-
   const [clients, setClients] = useState([]);
   const [loadingClients, setLoadingClients] = useState(true);
   const [selectedId, setSelectedId] = useState("");
   const [form, setForm] = useState({
-    company: "",
-    fullname: "",
-    lastname: "",
-    email: "",
-    street: "",
-    town: "",
-    province: "",
-    postalcode: "",
-    reg: "",
-    vat: "",
-    noi: "",
-    tel: "",
-    cell: "",
+    company: "", fullname: "", lastname: "", email: "",
+    street: "", town: "", province: "", postalcode: "",
+    reg: "", vat: "", noi: "", tel: "", cell: "",
   });
   const [saving, setSaving] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [blurActive, setBlurActive] = useState(false);
 
-  // Same blue focus styling as Clients
-  const darkBlueTextFieldSx = {
-    '& .MuiOutlinedInput-root': {
-      '& fieldset': {
-        borderColor: '#1976d2',
+  // Professional blue theme matching your system
+  const theme = {
+    primary: "#1976d2",
+    primaryDark: "#1565c0",
+    primaryLight: "#60a5fa",
+    textPrimary: "#1a202c",
+    textSecondary: "#4a5568",
+    success: "#48bb78",
+    error: "#f56565",
+    bgLight: "#f7fafc",
+    border: "#e2e8f0",
+  };
+
+  const commonFieldSx = {
+    mb: 2.5,
+    width: "100%",
+    "& .MuiOutlinedInput-root": {
+      bgcolor: "#ffffff",
+      borderRadius: 2,
+      "& fieldset": {
+        borderColor: theme.border,
+        borderWidth: 2,
       },
-      '&:hover fieldset': {
-        borderColor: '#1565c0',
+      "&:hover fieldset": {
+        borderColor: theme.primaryLight,
+        borderWidth: 2,
       },
-      '&.Mui-focused fieldset': {
-        borderColor: '#2196f3',
+      "&.Mui-focused fieldset": {
+        borderColor: theme.primary,
+        borderWidth: 2,
       },
+    },
+    "& .MuiInputLabel-root": {
+      color: theme.textSecondary,
+      fontWeight: 600,
     },
   };
 
@@ -195,144 +223,114 @@ export default function AdminSettings() {
     }
   };
 
+  const handleBack = () => navigate("/clients");
+
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        bgcolor: "transparent",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        py: { xs: 2, md: 6 },
-      }}
-    >
-      {/* ✅ SAME PREMIUM CONTAINER AS CLIENTS */}
-      <Box
-        sx={{
-          width: "100%",
-          maxWidth: "1200px",
-          bgcolor: "rgba(255,255,255,0.96)",
-          borderRadius: 3,
-          boxShadow: "0 6px 18px rgba(25,118,210,0.13)",
-          px: { xs: 2, md: 4 },
-          py: { xs: 2, md: 5 },
-          mb: 4,
-        }}
-      >
-        {/* ✅ SAME HEADER LAYOUT AS CLIENTS */}
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 3 }}>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 700,
-              color: "#000000",
-              letterSpacing: ".01em",
-              lineHeight: 1.2,
-            }}
-          >
-            Edit Client ({clients.length} available)
-          </Typography>
-          
-          <Box sx={{ display: "flex", gap: 1 }}>
-            <Button
-              variant="outlined"
-              size="large"
-              onClick={() => navigate("/clients")}
-              sx={{ borderRadius: 2, textTransform: "none" }}
-            >
-              View All Clients
-            </Button>
-            <Button
-              variant="contained"
-              color="primary"
-              size="large"
-              onClick={() => navigate("/dashboard")}
-              sx={{
-                borderRadius: 2,
-                fontWeight: 700,
-                textTransform: "none",
-                px: 3,
-                boxShadow: "0 2px 8px rgba(25,118,210,0.13)",
+    <Box sx={{ 
+      minHeight: "100vh", 
+      bgcolor: "#f8fafc", 
+      py: 6, 
+      px: { xs: 2, md: 4 }
+    }}>
+      <Box sx={{ maxWidth: 700, mx: "auto", width: "100%" }}>
+        {/* Header Card */}
+        <Paper 
+          elevation={0} 
+          sx={{ 
+            mb: 5, 
+            p: 4, 
+            borderRadius: 3, 
+            bgcolor: "white", 
+            border: `1px solid ${theme.border}`,
+            boxShadow: "0 4px 6px -1px rgba(0, 0,0, 0.1)"
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <IconButton 
+                onClick={handleBack} 
+                sx={{ 
+                  color: theme.textSecondary,
+                  "&:hover": { bgcolor: theme.bgLight }
+                }}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+              <Box>
+                <Typography 
+                  variant="h4" 
+                  sx={{ 
+                    fontWeight: 800, 
+                    color: theme.textPrimary,
+                    mb: 0.5
+                  }}
+                >
+                  Edit Client Details
+                </Typography>
+                <Typography 
+                  variant="body1" 
+                  sx={{ color: theme.textSecondary }}
+                >
+                  Select a client to update their information ({clients.length} available)
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Paper>
+
+        {/* Client Selection Card */}
+        <Card sx={{ 
+          mb: 5,
+          boxShadow: "0 20px 25px -5px rgba(0, 0,0, 0.1), 0 10px 10px -5px rgba(0, 0,0, 0.04)",
+          borderRadius: 3, 
+          border: `1px solid ${theme.border}`,
+          overflow: "hidden"
+        }}>
+          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+            <Typography 
+              variant="h6" 
+              sx={{ 
+                mb: 3, 
+                fontWeight: 700, 
+                color: theme.textPrimary,
+                display: "flex", 
+                alignItems: "center", 
+                gap: 1
               }}
             >
-              Dashboard
-            </Button>
-          </Box>
-        </Box>
-
-        {/* ✅ BLUR BACKDROP */}
-        <Backdrop
-          sx={{ 
-            zIndex: 1, 
-            backdropFilter: blurActive ? "blur(4px)" : "none",
-            backgroundColor: "rgba(0,0,0,0.1)",
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            borderRadius: 3
-          }}
-          open={blurActive}
-        />
-
-        {/* ✅ SUCCESS SNACKBAR */}
-        <Snackbar
-          open={snackbarOpen}
-          autoHideDuration={2500}
-          onClose={handleSuccessSnackbarClose}
-          anchorOrigin={{ vertical: "top", horizontal: "center" }}
-          sx={{ zIndex: 1300, top: { xs: 80, md: 100 } }}
-        >
-          <Alert
-            onClose={handleSuccessSnackbarClose}
-            severity="success"
-            variant="filled"
-            sx={{ 
-              width: "100%", 
-              fontSize: "1.1rem",
-              fontWeight: 600
-            }}
-          >
-            ✔ Company details updated successfully!
-          </Alert>
-        </Snackbar>
-
-        {/* ✅ CLIENT SELECTION CARD */}
-        <Card
-          sx={{
-            mb: 4,
-            borderRadius: 3,
-            boxShadow: "0px 6px 18px rgba(25, 118, 210, 0.16)",
-            bgcolor: "#fdfdff",
-            transition: "transform 0.19s, box-shadow 0.19s",
-            "&:hover": {
-              transform: "translateY(-2px)",
-              boxShadow: "0px 12px 28px rgba(25,118,210,0.2)",
-            },
-          }}
-        >
-          <CardContent sx={{ p: 3 }}>
+              <Business sx={{ fontSize: 24, color: theme.primary }} />
+              Select Client to Edit
+            </Typography>
+            
             {loadingClients ? (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                <CircularProgress size={32} />
+              <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+                <CircularProgress size={40} sx={{ color: theme.primary }} />
               </Box>
             ) : (
               <TextField
                 select
                 fullWidth
-                label="Select Host Company"
+                label="Choose Host Company"
                 value={selectedId}
                 onChange={(e) => setSelectedId(e.target.value)}
-                sx={{ 
-                  mb: 1, 
-                  ...darkBlueTextFieldSx 
-                }}
+                sx={commonFieldSx}
               >
-                <MenuItem value="">Select a company...</MenuItem>
-                {clients.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>
-                    {c.company} - {c.fullname} (ID: {c.id})
+                <MenuItem value="" disabled>
+                  Select a company to edit...
+                </MenuItem>
+                {clients.map((client) => (
+                  <MenuItem key={client.id} value={client.id}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                      <Business sx={{ fontSize: 20, color: theme.primary }} />
+                      <Box>
+                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                          {client.company}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+                          {client.fullname} (ID: {client.id})
+                        </Typography>
+                      </Box>
+                    </Box>
                   </MenuItem>
                 ))}
               </TextField>
@@ -340,198 +338,374 @@ export default function AdminSettings() {
           </CardContent>
         </Card>
 
-        {/* ✅ FORM WITH SAME GRID LAYOUT */}
-        {!loadingClients && selectedId && (
-          <Box
-            component="form"
-            onSubmit={handleSubmit}
-            sx={{
-              opacity: selectedId ? 1 : 0.5,
-              pointerEvents: selectedId ? "auto" : "none",
-            }}
-          >
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <TextField 
-                  label="Company" 
-                  name="company" 
-                  value={form.company} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField 
-                  label="Registration No" 
-                  name="reg" 
-                  value={form.reg} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField 
-                  label="Full name" 
-                  name="fullname" 
-                  value={form.fullname} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField 
-                  label="Last name" 
-                  name="lastname" 
-                  value={form.lastname} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField 
-                  label="Email" 
-                  name="email" 
-                  type="email" 
-                  value={form.email} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField 
-                  label="VAT No" 
-                  name="vat" 
-                  value={form.vat} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField 
-                  label="Street" 
-                  name="street" 
-                  value={form.street} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField 
-                  label="Town" 
-                  name="town" 
-                  value={form.town} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField 
-                  label="Province" 
-                  name="province" 
-                  value={form.province} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField 
-                  label="Postal code" 
-                  name="postalcode" 
-                  value={form.postalcode} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField 
-                  label="Number of Interns" 
-                  name="noi" 
-                  value={form.noi} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField 
-                  label="Telephone" 
-                  name="tel" 
-                  value={form.tel} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField 
-                  label="Cell" 
-                  name="cell" 
-                  value={form.cell} 
-                  onChange={handleChangeField} 
-                  fullWidth 
-                  sx={darkBlueTextFieldSx} 
-                />
-              </Grid>
-            </Grid>
-
-            <Box sx={{ mt: 4, display: "flex", justifyContent: "flex-end", gap: 2 }}>
-              <Button
-                type="submit" 
-                variant="contained" 
-                disabled={saving || !selectedId}
-                size="large"
-                sx={{
-                  fontWeight: 700,
-                  px: 4,
-                  borderRadius: 2,
-                  textTransform: "none",
-                  boxShadow: "0 2px 8px rgba(25,118,210,0.13)",
+        {/* Main Edit Form */}
+        {selectedId && !loadingClients && (
+          <Card sx={{ 
+            boxShadow: "0 20px 25px -5px rgba(0, 0,0, 0.1), 0 10px 10px -5px rgba(0, 0,0, 0.04)",
+            borderRadius: 3, 
+            border: `1px solid ${theme.border}`,
+            overflow: "hidden"
+          }}>
+            <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+              <Backdrop
+                sx={{ 
+                  zIndex: 1, 
+                  backdropFilter: blurActive ? "blur(4px)" : "none",
+                  backgroundColor: "rgba(0,0,0,0.1)",
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  borderRadius: 3
+                }}
+                open={blurActive}
+              />
+              
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  mb: 4, 
+                  fontWeight: 700, 
+                  color: theme.textPrimary,
+                  display: "flex", 
+                  alignItems: "center", 
+                  gap: 1
                 }}
               >
-                {saving ? (
-                  <>
-                    <CircularProgress size={20} sx={{ mr: 1 }} />
-                    Saving...
-                  </>
-                ) : (
-                  "Save Changes"
-                )}
-              </Button>
-            </Box>
-          </Box>
+                <EditIcon sx={{ fontSize: 24, color: theme.primary }} />
+                Update Client Information
+              </Typography>
+
+              <Box component="form" onSubmit={handleSubmit} sx={{ opacity: selectedId ? 1 : 0.5, pointerEvents: selectedId ? "auto" : "none" }}>
+                {/* Company Section */}
+                <Box sx={{ mb: 5 }}>
+                  <Typography 
+                    variant="subtitle1" 
+                    sx={{ 
+                      mb: 2.5, 
+                      fontWeight: 600, 
+                      color: theme.textPrimary 
+                    }}
+                  >
+                    Company Details
+                  </Typography>
+                  
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
+                    <TextField
+                      name="company"
+                      label="Company Name"
+                      value={form.company}
+                      onChange={handleChangeField}
+                      sx={commonFieldSx}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Business sx={{ color: theme.primary }} />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                    
+                    <Box sx={{ display: "flex", gap: 2.5 }}>
+                      <TextField
+                        name="reg"
+                        label="Company Registration No"
+                        value={form.reg}
+                        onChange={handleChangeField}
+                        sx={{ ...commonFieldSx, flex: 1 }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Business sx={{ color: theme.primary }} />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                      <TextField
+                        name="vat"
+                        label="VAT Number"
+                        value={form.vat}
+                        onChange={handleChangeField}
+                        sx={{ ...commonFieldSx, flex: 1 }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Business sx={{ color: theme.primary }} />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                </Box>
+
+                <Divider sx={{ my: 4 }} />
+
+                {/* Contact Section */}
+                <Box sx={{ mb: 5 }}>
+                  <Typography 
+                    variant="subtitle1" 
+                    sx={{ 
+                      mb: 2.5, 
+                      fontWeight: 600, 
+                      color: theme.textPrimary 
+                    }}
+                  >
+                    Contact Information
+                  </Typography>
+                  
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
+                    <TextField
+                      name="email"
+                      label="Email Address"
+                      type="email"
+                      value={form.email}
+                      onChange={handleChangeField}
+                      sx={commonFieldSx}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Email sx={{ color: theme.primary }} />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                    
+                    <Box sx={{ display: "flex", gap: 2.5 }}>
+                      <TextField
+                        name="tel"
+                        label="Telephone"
+                        value={form.tel}
+                        onChange={handleChangeField}
+                        sx={{ ...commonFieldSx, flex: 1 }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Phone sx={{ color: theme.primary }} />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                      <TextField
+                        name="cell"
+                        label="Cellphone"
+                        value={form.cell}
+                        onChange={handleChangeField}
+                        sx={{ ...commonFieldSx, flex: 1 }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <PhoneAndroid sx={{ color: theme.primary }} />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                </Box>
+
+                <Divider sx={{ my: 4 }} />
+
+                {/* Address Section */}
+                <Box sx={{ mb: 5 }}>
+                  <Typography 
+                    variant="subtitle1" 
+                    sx={{ 
+                      mb: 2.5, 
+                      fontWeight: 600, 
+                      color: theme.textPrimary 
+                    }}
+                  >
+                    Address Details
+                  </Typography>
+                  
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
+                    <TextField
+                      name="street"
+                      label="Street Address"
+                      value={form.street}
+                      onChange={handleChangeField}
+                      sx={commonFieldSx}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Home sx={{ color: theme.primary }} />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                    
+                    <Box sx={{ display: "flex", gap: 2.5 }}>
+                      <TextField
+                        name="town"
+                        label="Town/City"
+                        value={form.town}
+                        onChange={handleChangeField}
+                        sx={{ ...commonFieldSx, flex: 1 }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <LocationIcon sx={{ color: theme.primary }} />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                      <TextField
+                        name="province"
+                        label="Province"
+                        value={form.province}
+                        onChange={handleChangeField}
+                        sx={{ ...commonFieldSx, flex: 1 }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <LocationIcon sx={{ color: theme.primary }} />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </Box>
+
+                    <Box sx={{ display: "flex", gap: 2.5 }}>
+                      <TextField
+                        name="postalcode"
+                        label="Postal Code"
+                        value={form.postalcode}
+                        onChange={handleChangeField}
+                        sx={{ ...commonFieldSx, flex: 1 }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <PinDrop sx={{ color: theme.primary }} />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                      <TextField
+                        name="noi"
+                        label="Number of Interns"
+                        type="number"
+                        value={form.noi}
+                        onChange={handleChangeField}
+                        sx={{ ...commonFieldSx, flex: 1 }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Groups sx={{ color: theme.primary }} />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                </Box>
+
+                {/* Action Buttons */}
+                <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end", mt: 2 }}>
+                  <Button
+                    onClick={handleBack}
+                    variant="outlined"
+                    disabled={saving}
+                    sx={{
+                      flex: 1,
+                      minWidth: 140,
+                      py: 1.5,
+                      px: 3,
+                      borderRadius: 2,
+                      borderColor: theme.border,
+                      color: theme.textSecondary,
+                      fontWeight: 600,
+                      "&:hover": {
+                        borderColor: theme.primary,
+                        bgcolor: `${theme.primary}08`,
+                      },
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    disabled={saving || !selectedId}
+                    sx={{
+                      flex: 1,
+                      minWidth: 140,
+                      py: 1.5,
+                      px: 3,
+                      borderRadius: 2,
+                      bgcolor: theme.primary,
+                      fontWeight: 700,
+                      textTransform: "none",
+                      boxShadow: "0 4px 14px 0 rgba(25,118,210,0.4)",
+                      "&:hover": {
+                        bgcolor: theme.primaryDark,
+                        boxShadow: "0 6px 20px 0 rgba(25,118,210,0.5)",
+                        transform: "translateY(-1px)",
+                      },
+                    }}
+                    endIcon={saving ? <CircularProgress size={20} sx={{ color: "inherit" }} /> : <SaveIcon />}
+                  >
+                    {saving ? "Saving..." : "Save Changes"}
+                  </Button>
+                </Box>
+              </Box>
+
+              {/* Success Snackbar */}
+              <Snackbar
+                open={snackbarOpen}
+                autoHideDuration={2500}
+                onClose={handleSuccessSnackbarClose}
+                anchorOrigin={{ vertical: "top", horizontal: "center" }}
+                sx={{ zIndex: 1300, top: { xs: 80, md: 100 } }}
+              >
+                <Alert
+                  onClose={handleSuccessSnackbarClose}
+                  severity="success"
+                  variant="filled"
+                  sx={{ 
+                    width: "100%", 
+                    fontSize: "1.1rem",
+                    fontWeight: 600
+                  }}
+                >
+                  ✔ Client details updated successfully!
+                </Alert>
+              </Snackbar>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Empty state */}
-        {clients.length === 0 && !loadingClients && (
-          <Card
-            sx={{
-              mt: 4,
-              p: 6,
-              textAlign: "center",
-              borderRadius: 3,
-              bgcolor: "#fafafa",
-              border: "2px dashed #e0e0e0",
-            }}
-          >
-            <Typography variant="h6" sx={{ color: "#666", mb: 2 }}>
+        {/* Empty State */}
+        {!loadingClients && clients.length === 0 && !selectedId && (
+          <Card sx={{
+            mt: 5,
+            p: 8,
+            textAlign: "center",
+            borderRadius: 3,
+            bgcolor: "#fafbfc",
+            border: `2px dashed ${theme.border}`,
+          }}>
+            <Business sx={{ fontSize: 64, color: `${theme.primary}40`, mb: 3 }} />
+            <Typography variant="h6" sx={{ color: theme.textSecondary, mb: 2, fontWeight: 600 }}>
               No clients available
             </Typography>
+            <Typography variant="body1" sx={{ color: theme.textSecondary, mb: 4 }}>
+              Create some clients first to edit their details
+            </Typography>
             <Button
-              variant="outlined"
+              variant="contained"
               onClick={() => navigate("/clients")}
-              sx={{ borderRadius: 2 }}
+              sx={{ 
+                borderRadius: 2, 
+                px: 4, 
+                py: 1.5,
+                fontWeight: 600,
+                bgcolor: theme.primary,
+                textTransform: "none"
+              }}
             >
-              Create Clients First
+              Create New Client
             </Button>
           </Card>
         )}
@@ -539,3 +713,5 @@ export default function AdminSettings() {
     </Box>
   );
 }
+
+export default AdminSettings;

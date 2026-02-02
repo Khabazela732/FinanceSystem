@@ -197,7 +197,7 @@ function SignUp() {
   );
 }
 
-/* 🔁 Shared styles copied from Login */
+/*Shared styles copied from Login */
 const fieldStyle = {
   mb: 2,
   "& .MuiOutlinedInput-root": {

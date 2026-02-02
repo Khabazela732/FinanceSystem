@@ -1,17 +1,17 @@
 require('dotenv').config();
-const express = require("express");
-const mysql = require("mysql2/promise");
+const express = require("express"); //
+const mysql = require("mysql2/promise"); //
 const cors = require("cors");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const nodemailer = require("nodemailer");
+const nodemailer = require("nodemailer"); // We use nodemailer for sending emails
 const crypto = require("crypto");
-const cloudinary = require("cloudinary").v2;
+const cloudinary = require("cloudinary").v2; //THis is the cloudinary storage of 250GB for files
 const app = express();
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:3000";
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:3000"; // frontend url For System Admin
 const CLIENT_PORTAL_URL = process.env.CLIENT_PORTAL_URL || "http://localhost:3000/clients/login";
 const PORT = process.env.PORT || 3001;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "mkhizesenzo732@gmail.com";
@@ -30,39 +30,37 @@ function authenticateAdmin(req, res, next) {
   try {
     if (req.session?.userId) {
       req.userId = req.session.userId;
+      req.isAdmin = true;  // Add explicit admin flag
       return next();
     }
     return res.status(401).json({ success: false, message: "Admin authentication required" });
   } catch (error) {
     console.error("Auth middleware error:", error);
     res.status(500).json({ success: false, message: "Auth error" });
-}}
+  }
+}
+
 function authenticateClient(req, res, next) {
   try {
-    console.log('🔍 Auth Debug:', {
+    console.log('Auth Debug:', {
       sessionExists: !!req.session,
       clientId: req.session?.clientId,
       userId: req.session?.userId,
       sessionId: req.sessionID?.slice(0, 8) + '...'
     });
 
-    // Check BOTH possible session keys (flexible)
-    if (req.session?.clientId || req.session?.userId) {
-      req.clientId = req.session.clientId || req.session.userId;
-      req.userId = req.session.userId || req.session.clientId;
+    // STRICT: Only accept clientId (never userId/admin sessions)
+    if (req.session?.clientId && !req.session.userId) {  
+      req.clientId = req.session.clientId;
       console.log('Client authenticated:', req.clientId);
       return next();
     }
 
-    console.log('No valid session - 401');
+    console.log('No valid CLIENT session - 401');
     return res.status(401).json({ 
       success: false, 
       message: "Client authentication required - please login",
-      debug: {
-        hasSession: !!req.session,
-        clientId: req.session?.clientId,
-        userId: req.session?.userId
-      }
+      debug: { clientId: req.session?.clientId }
     });
   } catch (error) {
     console.error("Client auth error:", error);
@@ -70,16 +68,43 @@ function authenticateClient(req, res, next) {
   }
 }
 
-function isAuthenticated(req, res, next) {
+
+// ADMIN ONLY - Independent from client
+function requireAdmin(req, res, next) {
   try {
-    if (req.session && (req.session.userId || req.session.clientId)) {req.userId = req.session.userId || req.session.clientId;req.isAdmin = !!req.session.userId;req.isClient = !!req.session.clientId;req.clientId = req.session.clientId;
+    if (req.session?.userId && !req.session.clientId) {  // Admin ONLY
+      req.userId = req.session.userId;
+      req.isAdmin = true;
       return next();
     }
-    return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
-  } catch (error) {console.error("Auth error:", error);
+    return res.status(401).json({ 
+      success: false, 
+      message: "Admin access required" 
+    });
+  } catch (error) {
+    console.error("Admin auth error:", error);
     res.status(500).json({ success: false, message: "Auth error" });
   }
 }
+
+// CLIENT ONLY - Independent from admin  
+function requireClient(req, res, next) {
+  try {
+    if (req.session?.clientId && !req.session.userId) {  // Client ONLY
+      req.clientId = req.session.clientId;
+      req.isClient = true;
+      return next();
+    }
+    return res.status(401).json({ 
+      success: false, 
+      message: "Client login required" 
+    });
+  } catch (error) {
+    console.error("Client auth error:", error);
+    res.status(500).json({ success: false, message: "Auth error" });
+  }
+}
+
 //FIXED: PROMISE-BASED MYSQL - GLOBAL ACCESS
 let dbPool;
 async function initDb() {
@@ -91,7 +116,7 @@ async function initDb() {
       console.log("Temp uploads folder created");
     }
   } catch (error) {
-    console.error("❌ MySQL connection error:", error);
+    console.error(" MySQL connection error:", error);
     process.exit(1);
   }
 }
@@ -247,7 +272,8 @@ async function generateInvoicePDF(invoice) {
 }
 
 
-// ================= ADMIN REGISTER (FIXED) =================
+//On this backend api, this is not exposed to frontend
+// This is for production stages, not yet working currently
 app.post("/api/signup", async (req, res) => {
   try {
     const {
@@ -259,7 +285,7 @@ app.post("/api/signup", async (req, res) => {
       password,
     } = req.body;
 
-    console.log("📥 Admin register payload:", req.body);
+    console.log("Admin register payload:", req.body);
 
     if (!username || !full_name || !email || !password) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -271,7 +297,7 @@ app.post("/api/signup", async (req, res) => {
       [email, username],
       async (err, results) => {
         if (err) {
-          console.error("❌ SELECT error:", err);
+          console.error("SELECT error:", err);
           return res.status(500).json({ message: "Database error (select)" });
         }
 
@@ -297,7 +323,7 @@ app.post("/api/signup", async (req, res) => {
           ],
           (err, result) => {
             if (err) {
-              console.error("❌ INSERT error:", err);
+              console.error("INSERT error:", err);
               return res
                 .status(500)
                 .json({ message: "Database error (insert)" });
@@ -319,9 +345,9 @@ app.post("/api/signup", async (req, res) => {
 
 //Cloudinary config
 console.log("  Cloudinary config check:");
-console.log("  Cloud name:", process.env.CLOUDINARY_CLOUD_NAME ? "✅ OK" : "❌ MISSING");
-console.log("  API Key:", process.env.CLOUDINARY_API_KEY ? "✅ OK" : "❌ MISSING");
-console.log("  API Secret:", process.env.CLOUDINARY_API_SECRET ? "✅ OK" : "❌ MISSING");
+console.log("  Cloud name:", process.env.CLOUDINARY_CLOUD_NAME ? "OK" : "MISSING");
+console.log("  API Key:", process.env.CLOUDINARY_API_KEY ? "OK" : " MISSING");
+console.log("  API Secret:", process.env.CLOUDINARY_API_SECRET ? " OK" : " MISSING");
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -421,9 +447,6 @@ async function sendClientWelcomeEmail(clientEmail, clientUsername, tempPassword,
   }
 }
 
-
-
-
 //PERFECTLY ALIGNED WITH ClientForm.js - SENDS WELCOME EMAIL!
 app.post('/api/clients', authenticateAdmin, async (req, res) => {
   try {console.log('Creating client - RAW BODY:', JSON.stringify(req.body, null, 2));
@@ -468,7 +491,7 @@ const clientId = result.insertId;
 app.post("/api/clients/login", async (req, res) => {
   try {const email = (req.body.email || "").trim().toLowerCase();const password = req.body.password || "";
     console.log(`Login attempt for email: ${email}`);
-// ✅ VALIDATION
+// VALIDATION
     if (!email || !password) {return res.status(400).json({success: false,message: "Email and password required"});
     }
     if (!email.includes('@')) {return res.status(400).json({success: false,message: "Please enter a valid email address"});
@@ -476,7 +499,7 @@ app.post("/api/clients/login", async (req, res) => {
     //DATABASE QUERY - EMAIL AUTH
     const rows = await safeQuery("SELECT id, company, fullname, lastname, email, password FROM host_employers WHERE email = ? LIMIT 1",
       [email]);
-    console.log(`📊 Found ${rows.length} matching users`);
+    console.log(`Found ${rows.length} matching users`);
     if (!rows.length) {console.log(`No user found for email: ${email}`);
 
     //SECURITY: Don't reveal if email exists
@@ -546,7 +569,7 @@ app.post("/api/clients/login", async (req, res) => {
       success: false, 
       message: "Login service temporarily unavailable" });}});
 
-// ✅ FORGOT PASSWORD - OTP via EMAIL
+// FORGOT PASSWORD - OTP via EMAIL
 app.post('/api/clients/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
@@ -571,7 +594,7 @@ app.post('/api/clients/forgot-password', async (req, res) => {
       [email, otp, expiresAt]
     );
     
-    // Send beautiful OTP email
+    // Sendng OTP email to client for resetting their passwords 
     await transporter.sendMail({
       from: `"Internship Success" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -608,7 +631,7 @@ app.post('/api/clients/forgot-password', async (req, res) => {
   }
 });
 
-// ✅ OTP Verification & Password Reset
+// OTP Verification & Password Reset api using http method - post
 app.post('/api/clients/verify-otp-reset', async (req, res) => {
   try {
     const { email, otp, password } = req.body;
@@ -732,7 +755,7 @@ app.get("/api/client/me", async (req, res) => {
   }
 });
 
-// 2. UPDATE logged-in client profile - /api/client/me  
+//A logged-in client /api/client/me = tracking clientID
 app.put("/api/client/me", authenticateClient, async (req, res) => {
   try {
     const clientId = req.clientId;
@@ -781,19 +804,24 @@ app.put("/api/client/me", authenticateClient, async (req, res) => {
 
 //FIXED UPLOAD - NO PROMISE REJECTIONS - PDF + IMAGES PERFECT!
 app.post('/api/proofs/upload', upload.single('proofFile'), async (req, res) => {
-  console.log('📁 Upload attempt...'); 
-  try {const { clientId, comment } = req.body; 
+  console.log('Upload attempt...'); 
+  try {
+    const { clientId, comment } = req.body; 
     if (!req.file || !clientId) {
       if (req.file) {
         fs.unlink(req.file.path, () => {});
-}
-      return res.status(400).json({ success: false, message: "File and clientId required" });}
+      }
+      return res.status(400).json({ success: false, message: "File and clientId required" });
+    }
+    
     // Verify client
     const clients = await safeQuery("SELECT id, company, fullname, email FROM host_employers WHERE id = ?", [clientId]);
     if (!clients || clients.length === 0) {
       if (req.file) fs.unlink(req.file.path, () => {});
-      return res.status(404).json({ success: false, message: "Client not found" });}
-    // Cloudinary upload - SAFE PROMISE
+      return res.status(404).json({ success: false, message: "Client not found" });
+    }
+    
+    // Cloudinary upload - Safe Promise
     const isPDF = req.file.mimetype === 'application/pdf';
     const uploadOptions = {
       folder: 'proofs',
@@ -804,10 +832,10 @@ app.post('/api/proofs/upload', upload.single('proofFile'), async (req, res) => {
     const uploadResult = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload(req.file.path, uploadOptions, (error, result) => {
         if (error) {
-          console.error('☁️ Cloudinary error:', error);
+          console.error('Cloudinary error:', error);
           reject(new Error(`Cloudinary: ${error.message}`));
         } else {
-          console.log('☁️ Success:', result.secure_url);
+          console.log('Success:', result.secure_url);
           resolve(result);
         }
       });
@@ -832,6 +860,13 @@ app.post('/api/proofs/upload', upload.single('proofFile'), async (req, res) => {
       [`NEW PROOF from ${clients[0].company} (${clientId}): ${uploadResult.secure_url}`, ADMIN_EMAIL]
     );
 
+    // ADD THESE 3 LINES FOR PROOF UPLOAD TRACKING (RIGHT AFTER NOTIFICATION)
+    await safeQuery(
+      'INSERT INTO activity_logs (user_type, user_id, client_company, action, proof_id) VALUES (?, ?, ?, ?, ?)',
+      ['client', clientId, clients[0].company, 'proof_uploaded', result.insertId]
+    );
+    console.log(`PROOF UPLOAD TRACKED: ${clients[0].company} (Proof ID: ${result.insertId})`);
+
     // Safe email to admin
     try {
       await transporter.sendMail({
@@ -849,10 +884,10 @@ app.post('/api/proofs/upload', upload.single('proofFile'), async (req, res) => {
       console.warn("Email failed:", emailError.message);
     }
 
-    console.log(`✅ UPLOAD COMPLETE: Proof ID ${result.insertId}`);
+    console.log(`UPLOAD COMPLETE: Proof ID ${result.insertId}`);
     res.json({ 
       success: true,
-      message: "✅ Upload successful", 
+      message: "Upload successful", 
       url: uploadResult.secure_url,
       proofId: result.insertId,
       file_type: req.file.mimetype
@@ -871,7 +906,7 @@ app.post('/api/proofs/upload', upload.single('proofFile'), async (req, res) => {
 // ENTERPRISE INVOICE CREATION & ISSUING ENDPOINT
 app.post("/api/invoices", authenticateAdmin, async (req, res) => {
   try {
-    console.log("📄 Invoice request received:", req.body);
+    console.log(" Invoice request received:", req.body);
 
     const {
       company_name,
@@ -882,170 +917,79 @@ app.post("/api/invoices", authenticateAdmin, async (req, res) => {
       due_date,
       amount,
       amount_due,
-      status // DRAFT | ISSUED | SENT
+      status // waiting_for_payment | partially_paid | paid
     } = req.body;
 
-    // -----------------------------
-    // 1. VALIDATE STATUS (STRICT)
-    // -----------------------------
-    const allowedStatuses = ["draft","DRAFT", "ISSUED", "SENT", "sent"];
-    const finalStatus = allowedStatuses.includes(status)
-      ? status
-      : "DRAFT";
+    //VALIDATE STATUS - Match StatusChip exactly
+    const allowedStatuses = ["waiting_for_payment", "partially_paid", "paid"];
+    const finalStatus = allowedStatuses.includes(status) ? status : "waiting_for_payment";
 
     // -----------------------------
-    // 2. BASIC VALIDATION
+    // VALIDATION (unchanged)
     // -----------------------------
-    if (!company_name?.trim())
-      return res.status(400).json({ message: "Company name required" });
+    if (!company_name?.trim()) return res.status(400).json({ message: "Company name required" });
+    if (!invoice_number?.trim()) return res.status(400).json({ message: "Invoice number required" });
+    if (!client_id || isNaN(client_id)) return res.status(400).json({ message: "Valid client ID required" });
+    if (!invoice_date) return res.status(400).json({ message: "Invoice date required" });
+    if (!due_date) return res.status(400).json({ message: "Due date required" });
+    if (!amount || Number(amount) <= 0) return res.status(400).json({ message: "Valid invoice amount required" });
 
-    if (!invoice_number?.trim())
-      return res.status(400).json({ message: "Invoice number required" });
+    // Check duplicate
+    const duplicate = await safeQuery("SELECT id FROM invoices WHERE invoice_number = ?", [invoice_number.trim()]);
+    if (duplicate.length > 0) return res.status(409).json({ message: "Invoice number already exists" });
 
-    if (!client_id || isNaN(client_id))
-      return res.status(400).json({ message: "Valid client ID required" });
-
-    if (!invoice_date)
-      return res.status(400).json({ message: "Invoice date required" });
-
-    if (!due_date)
-      return res.status(400).json({ message: "Due date required" });
-
-    if (!amount || Number(amount) <= 0)
-      return res.status(400).json({ message: "Valid invoice amount required" });
-
-    // -----------------------------
-    // 3. CHECK DUPLICATE INVOICE NUMBER
-    // -----------------------------
-    const duplicate = await safeQuery(
-      "SELECT id FROM invoices WHERE invoice_number = ?",
-      [invoice_number.trim()]
-    );
-
-    if (duplicate.length > 0) {
-      return res.status(409).json({ message: "Invoice number already exists" });
-    }
-
-    // -----------------------------
-    // 4. VERIFY CLIENT
-    // -----------------------------
-    const client = await safeQuery(
-      "SELECT id, company, email, fullname FROM host_employers WHERE id = ?",
-      [client_id]
-    );
-
-    if (!client.length) {
-      return res.status(404).json({ message: "Client not found" });
-    }
+    // Verify client
+    const client = await safeQuery("SELECT id, company, email, fullname FROM host_employers WHERE id = ?", [client_id]);
+    if (!client.length) return res.status(404).json({ message: "Client not found" });
 
     const clientEmail = client[0].email;
     const clientCompany = client[0].company;
     const clientName = client[0].fullname;
 
-    // -----------------------------
-    // 5. ISSUED TIMESTAMP RULE
-    // -----------------------------
-    const issuedAt =
-      finalStatus === "ISSUED" || finalStatus === "SENT"
-        ? new Date()
-        : null;
+    // Set issued_at for non-waiting
+    const issuedAt = finalStatus !== "waiting_for_payment" ? new Date() : null;
 
     // -----------------------------
-    // 6. INSERT INVOICE (ENTERPRISE-SAFE)
+    // INSERT INVOICE
     // -----------------------------
     const result = await safeQuery(
-  `
-  INSERT INTO invoices (
-    client_id, company_name, invoice_number, customer_reference,
-    invoice_date, due_date, amount, amount_due, status, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-  `,
-  [
-    client_id,                    // ← ADD THIS FIRST
-    company_name.trim(),
-    invoice_number.trim(),
-    customer_reference?.trim() || null,
-    invoice_date,
-    due_date,
-    Number(amount),
-    Number(amount_due || amount),
-    finalStatus
-  ]
-);
-
-    const invoiceId = result.insertId;
-
-    // -----------------------------
-    // 7. ADMIN AUDIT NOTIFICATION
-    // -----------------------------
-    await safeQuery(
-      `
-      INSERT INTO notifications (message, user_mail, viewed, created_at)
-      VALUES (?, ?, 0, NOW())
-      `,
+      `INSERT INTO invoices (
+        client_id, company_name, invoice_number, customer_reference,
+        invoice_date, due_date, amount, amount_due, status, issued_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
-        `📄 INVOICE ${finalStatus}: #${invoice_number} for ${clientCompany} (R${Number(amount).toLocaleString()})`,
-        ADMIN_EMAIL
+        client_id,
+        company_name.trim(),
+        invoice_number.trim(),
+        customer_reference?.trim() || null,
+        invoice_date,
+        due_date,
+        Number(amount),
+        Number(amount_due || amount),
+        finalStatus,
+        issuedAt
       ]
     );
 
-    // -----------------------------
-    // 8. EMAIL CLIENT ONLY IF SENT
-    // -----------------------------
-    if (finalStatus === "SENT" || finalStatus === "sent") {
-      try {
-        await transporter.sendMail({
-          from: process.env.EMAIL_USER,
-          to: clientEmail,
-          subject: `Invoice Number:${invoice_number} Issued`,
-          html: `
-            <div style="font-family: Arial; max-width: 600px; margin: auto;">
-              <h2 style="color:#1976d2;">Official Invoice Issued</h2>
-              <p>Dear ${clientName || clientCompany},</p>
+    const invoiceId = result.insertId;
 
-              <p>Your invoice <strong>${invoice_number}</strong> has been officially issued.</p>
+    // Activity log
+    await safeQuery(
+      'INSERT INTO activity_logs (user_type, user_id, client_company, action, invoice_id) VALUES (?, ?, ?, ?, ?)',
+      ['admin', req.session.userId, clientCompany, 'invoice_created', invoiceId]
+    );
 
-              <ul>
-                <li><strong>Invoice Date:</strong> ${new Date(invoice_date).toLocaleDateString()}</li>
-                <li><strong>Due Date:</strong> ${new Date(due_date).toLocaleDateString()}</li>
-                <li><strong>Amount Due:</strong> R ${Number(amount_due || amount).toLocaleString()}</li>
-              </ul>
+    // Admin notification
+    await safeQuery(
+      `INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())`,
+      [`📄 NEW INVOICE ${finalStatus.toUpperCase()}: #${invoice_number} (R${Number(amount).toLocaleString()})`, ADMIN_EMAIL]
+    );
 
-              <p>
-                Please log in to your
-                <a href="${CLIENT_PORTAL_URL}">Client Portal</a>
-                to view and manage this invoice.
-              </p>
-
-              <hr />
-              <p>${company_name}</p>
-            </div>
-          `
-        });
-
-        await safeQuery(
-          `
-          INSERT INTO notifications (message, user_mail, viewed, created_at)
-          VALUES (?, ?, 0, NOW())
-          `,
-          [
-            `📧 INVOICE SENT: #${invoice_number} → ${clientEmail}`,
-            ADMIN_EMAIL
-          ]
-        );
-      } catch (mailErr) {
-        console.error("🚨 Invoice email failed:", mailErr.message);
-      }
-    }
-
-    // -----------------------------
-    // 9. FINAL RESPONSE
-    // -----------------------------
     res.json({
       success: true,
       invoiceId,
       status: finalStatus,
-      message: `Invoice successfully ${finalStatus}`
+      message: `Invoice created as ${finalStatus.replace('_', ' ')}`
     });
 
   } catch (err) {
@@ -1054,33 +998,59 @@ app.post("/api/invoices", authenticateAdmin, async (req, res) => {
   }
 });
 
-// FIXED! LIST INVOICES - BULLETPROOF
-
-
 // SINGLE INVOICE BY ID
-app.get('/api/invoices/:id', authenticateClient, async (req, res) => {
+app.get('/api/invoices/:id', async (req, res) => {
   try {
+    // INLINE AUTH - Admin OR matching Client
+    if (!req.session) {
+      return res.status(401).json({ success: false, message: "No session" });
+    }
+
+    const isAdmin = !!req.session.userId && !req.session.clientId;
+    const isClient = !!req.session.clientId && !req.session.userId;
+    const sessionClientId = req.session.clientId;
+
+    if (!isAdmin && !isClient) {
+      return res.status(401).json({ success: false, message: "Login required" });
+    }
+
     const invoiceId = req.params.id;
-    const clientId = req.clientId;
+    const clientId = isAdmin ? null : sessionClientId; // Admin bypasses client filter
     
-    console.log('Fetching invoice:', invoiceId, 'for client:', clientId);
-    
-    const [invoice] = await safeQuery(`
+    console.log('SINGLE INVOICE DEBUG:', {
+      invoiceId,
+      isAdmin,
+      isClient,
+      sessionClientId,
+      usingClientId: clientId
+    });
+
+    // Build query based on role
+    let query = `
       SELECT 
         i.*,
         he.company as client_company,
         he.fullname as client_name
       FROM invoices i
       LEFT JOIN host_employers he ON i.client_id = he.id
-      WHERE i.id = ? AND i.client_id = ?
-    `, [invoiceId, clientId]);
+      WHERE i.id = ?
+    `;
+    let params = [invoiceId];
+
+    if (isClient) {
+      query += ' AND i.client_id = ?';
+      params.push(clientId);
+    }
+
+    const [invoice] = await safeQuery(query, params);
     
     if (!invoice) {
       return res.status(404).json({ message: 'Invoice not found' });
     }
     
-    console.log('Invoice found:', invoice.invoice_number);
+    console.log('Invoice found:', invoice.invoice_number, 'for', isAdmin ? 'ADMIN' : `client ${clientId}`);
     res.json(invoice);
+
   } catch (error) {
     console.error('Invoice fetch error:', error);
     res.status(500).json({ message: 'Failed to fetch invoice' });
@@ -1088,123 +1058,159 @@ app.get('/api/invoices/:id', authenticateClient, async (req, res) => {
 });
 
 
-// ENTERPRISE INVOICE FETCH (ADMIN + CLIENT SAFE) - FIXED
-app.get("/api/invoices", isAuthenticated, async (req, res) => {
+// Admin api for fetching all the invoices, with midlleware protection 
+app.get("/api/invoices", async (req, res) => {
+ //Authenticate outside the try/catch block
+  console.log('RAW SESSION:', req.session);
+  
+  if (!req.session?.userId) {
+    console.log('NO ADMIN SESSION');
+    return res.status(401).json({ success: false, message: "Admin login required" });
+  }
+
+  console.log('ADMIN DETECTED:', req.session.userId);
+  
+  // DB LOGIC ONLY in try/catch
   try {
-    console.log('🔍 === INVOICES DEBUG START ===');
-    console.log('🔍 req.isClient:', req.isClient);
-    console.log('🔍 req.clientId:', req.clientId);
+    const invoices = await safeQuery(`
+      SELECT 
+        i.*, he.company AS client_company,
+        he.fullname AS client_name, he.email AS client_email
+      FROM invoices i
+      LEFT JOIN host_employers he ON i.client_id = he.id
+      ORDER BY i.issued_at DESC
+    `);
     
-    let invoices = [];
-
-    if (req.isClient) {
-      console.log('🔍 CLIENT MODE - clientId:', req.clientId);
-      
-      invoices = await safeQuery(
-        `
-        SELECT 
-          i.id,
-          i.invoice_number,
-          i.company_name,
-          i.invoice_date,
-          i.due_date,
-          i.amount,
-          i.amount_due,
-          i.status,
-          i.issued_at,
-          i.client_id
-        FROM invoices i
-        WHERE 
-          i.client_id = ?
-          AND i.status IN ('sent', 'SENT', 'ISSUED', 'PAID', 'OVERDUE', 'draft')
-        ORDER BY i.issued_at DESC
-        `,
-        [req.clientId]
-      );
-      
-      console.log('✅ CLIENT INVOICES:', invoices.length);
-      if (invoices.length > 0) {
-        console.log('🔍 FIRST INVOICE client_id:', invoices[0].client_id);
-      } else {
-        console.log('❌ NO INVOICES for client_id:', req.clientId);
-      }
-    }
-
-    if (req.isAdmin) {
-      console.log('🔍 ADMIN MODE');
-      invoices = await safeQuery(
-        `
-        SELECT 
-          i.*,
-          he.company AS client_company,
-          he.fullname AS client_name,
-          he.email AS client_email
-        FROM invoices i
-        LEFT JOIN host_employers he ON i.client_id = he.id
-        ORDER BY i.issued_at DESC
-        `
-      );
-      console.log('✅ ADMIN INVOICES:', invoices.length);
-    }
-
-    console.log('📤 SENDING:', invoices.length, 'invoices');
-    res.json(invoices || []);
-
+    console.log('ADMIN INVOICES:', invoices.length);
+    console.log('SENDING:', invoices.length, 'invoices');
+    res.json(invoices);
+    
   } catch (error) {
-    console.error("🚨 INVOICE FETCH ERROR:", error);
+    console.error("DB ERROR:", error);
     res.status(500).json({ message: "Failed to fetch invoices" });
   }
 });
 
 
-app.get('/api/invoices', authenticateClient, async (req, res) => {
+app.get('/api/client/invoices', async (req, res) => {
   try {
-    const clientId = req.user.id; // Gets client ID 39 from your auth middleware
+    // INLINE CLIENT-ONLY AUTH (independent from admin)
+    if (!req.session?.clientId || req.session.userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Client login required (admin access blocked)" 
+      });
+    }
+
+    const clientId = req.session.clientId;  // Direct from session (not req.user.id)
     
-    console.log(`🔍 Client ${clientId} fetching THEIR invoices only`);
+    console.log(`Client ${clientId} fetching THEIR invoices only`);
     
     const invoices = await safeQuery(`
       SELECT 
         id, invoice_number, company_name, invoice_date, due_date,
-        amount, amount_due, status, created_at
+        amount, amount_due, status, created_at, issued_at, client_id
       FROM invoices 
       WHERE client_id = ?
+        AND status IN ('sent', 'SENT', 'ISSUED', 'PAID', 'OVERDUE', 'draft')
       ORDER BY created_at DESC
     `, [clientId]);
     
-    console.log(`✅ Client ${clientId} has ${invoices.length} invoices`);
+    console.log(`Client ${clientId} has ${invoices.length} invoices`);
     res.json(invoices);
+
   } catch (error) {
     console.error('Client invoices error:', error);
     res.status(500).json({ success: false, message: 'Failed to load invoices' });
   }
 });
 
-// NEW! SEND PAYMENT REMINDER - FIXES YOUR BUTTON!
+
+//Delete and Invoice API from list  as well as in Database
+app.delete('/api/invoices/:id', authenticateAdmin, async (req, res) => {
+  try {
+    await db.query('DELETE FROM invoices WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Invoice deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete invoice' });
+  }
+});
+
+// Only drafts will be deleted with this api 
+app.delete('/api/drafts/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const draftId = req.params.id;
+    
+    //Verify it's DRAFT and get details
+    const [draft] = await safeQuery(
+      `SELECT id, invoice_number, status 
+       FROM invoices 
+       WHERE id = ? AND status = 'DRAFT'`,
+      [draftId]
+    );
+    
+    if (!draft) {
+      return res.status(404).json({ 
+        error: 'Draft invoice not found or not in DRAFT status' 
+      });
+    }
+    
+    //Delete DRAFT only
+    const [result] = await safeQuery(
+      'DELETE FROM invoices WHERE id = ? AND status = "DRAFT"',
+      [draftId]
+    );
+    
+    //Verify deletion
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Draft not found for deletion' });
+    }
+    
+    //Success response
+    res.json({ 
+      success: true,
+      message: `Draft ${draft.invoice_number} deleted successfully!`,
+      deletedId: draftId,
+      affectedRows: result.affectedRows
+    });
+    
+  } catch (error) {
+    console.error('Draft delete error:', error);
+    res.status(500).json({ error: 'Failed to delete draft' });
+  }
+});
+
+
+//This api is for sending payment reminders into the clients(using post method)
 app.post('/api/reminders/payment/:invoiceId', authenticateAdmin, async (req, res) => {
   try {
     const invoiceId = parseInt(req.params.invoiceId);
     if (isNaN(invoiceId)) {
       return res.status(400).json({ success: false, message: "Invalid invoice ID" });
     }
-// Get invoice + client details
+    
+    // Get invoice + client details SQL query for selecting a comany by InvoiceId.
     const invoice = await safeQuery(`
       SELECT i.*, he.email, he.company, he.fullname 
       FROM invoices i 
       LEFT JOIN host_employers he ON i.client_id = he.id 
       WHERE i.id = ?
     `, [invoiceId]);
+    
     if (!invoice.length) {
       return res.status(404).json({ success: false, message: "Invoice not found" });
     }
+    
     const inv = invoice[0];
     if (parseFloat(inv.amount_due) <= 0) {
       return res.status(400).json({ success: false, message: "Invoice already paid" });
     }
+    
     // Calculate days overdue
     const dueDate = new Date(inv.due_date);
     const daysOverdue = Math.floor((Date.now() - dueDate) / (1000 * 60 * 60 * 24));
     const isOverdue = daysOverdue > 0;
+    
     // Send professional reminder email
     await transporter.sendMail({
       from: process.env.EMAIL_USER || "mkhizesenzo732@gmail.com",
@@ -1212,29 +1218,38 @@ app.post('/api/reminders/payment/:invoiceId', authenticateAdmin, async (req, res
       subject: `${isOverdue ? 'URGENT' : 'Friendly'} Payment Reminder: Invoice Number:${inv.invoice_number}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: ${isOverdue ? '#df4949' : '#1976d2'};">${isOverdue ? 'URGENT PAYMENT REMINDER' : 'Payment Reminder'}</h2> 
-          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3>📄 Invoice Details</h3>
-            <p><strong>Invoice:</strong> ${inv.invoice_number}</p>
-            <p><strong>Client:</strong> ${inv.company}</p>
-            <p><strong>Date:</strong> ${new Date(inv.invoice_date).toLocaleDateString()}</p>
-            <p><strong>Due Date:</strong> ${new Date(inv.due_date).toLocaleDateString()}${isOverdue ? ` (OVERDUE ${daysOverdue} days)` : ''}</p>
-            <p><strong>Amount Due:</strong> <span style="color: #d32f2f; font-size: 1.3em; font-weight: bold;">R ${parseFloat(inv.amount_due).toLocaleString()}</span></p>
-          </div>
-          <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p>Upload Payment:</p>
-            <p>Login to your <a href="${CLIENT_PORTAL_URL}">Client Portal</a> to upload payment proof.</p>
-          </div>
-          <hr style="margin: 30px 0;">
-          <p>Thank you for your prompt attention.<br>${inv.company_name} Team</p>
+         <h2 style="color: ${isOverdue ? '#df4949' : '#1976d2'};">${isOverdue ? 'URGENT PAYMENT REMINDER' : 'Payment Reminder'}</h2> 
+         <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+           <h3>📄 Invoice Details</h3>
+           <p><strong>Invoice:</strong> ${inv.invoice_number}</p>
+           <p><strong>Client:</strong> ${inv.company}</p>
+           <p><strong>Date:</strong> ${new Date(inv.invoice_date).toLocaleDateString()}</p>
+           <p><strong>Due Date:</strong> ${new Date(inv.due_date).toLocaleDateString()}${isOverdue ? ` (OVERDUE ${daysOverdue} days)` : ''}</p>
+           <p><strong>Amount Due:</strong> <span style="color: #d32f2f; font-size: 1.3em; font-weight: bold;">R ${parseFloat(inv.amount_due).toLocaleString()}</span></p>
+         </div>
+         <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
+           <p>Upload Payment:</p>
+           <p>Login to your <a href="${CLIENT_PORTAL_URL}">Client Portal</a> to upload payment proof.</p>
+         </div>
+         <hr style="margin: 30px 0;">
+         <p>Thank you for your prompt attention.<br>${inv.company_name} Team</p>
         </div>
       `
     });
+    
     // Admin notification
     await safeQuery(
       "INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())",
       [`REMINDER SENT: Invoice Number:${inv.invoice_number} → ${inv.company} (R${inv.amount_due})`, ADMIN_EMAIL]
     );
+
+    //ADD THESE 3 LINES FOR REMINDER TRACKING (RIGHT AFTER NOTIFICATION)
+    await safeQuery(
+      'INSERT INTO activity_logs (user_type, user_id, client_company, action, invoice_id) VALUES (?, ?, ?, ?, ?)',
+      ['admin', req.session.userId, inv.company, 'reminder_sent', invoiceId]
+    );
+    console.log(`REMINDER TRACKED: ${inv.company} (Invoice #${inv.invoice_number}, ID: ${invoiceId})`);
+
     console.log(`Reminder sent for invoice #${inv.invoice_number} → ${inv.email}`);
     res.json({ 
       success: true, 
@@ -1245,13 +1260,32 @@ app.post('/api/reminders/payment/:invoiceId', authenticateAdmin, async (req, res
     res.status(500).json({ success: false, message: "Failed to send reminder" });
   }
 });
+
 //CLIENT PROOFS - ADMIN OR OWNER ONLY
-app.get('/api/clients/:id/proofs', isAuthenticated, async (req, res) => {
+app.get('/api/clients/:id/proofs', async (req, res) => {
   try {
-    const clientId = parseInt(req.params.id); 
-    if (req.isClient && req.clientId !== clientId) {
+    // INLINE AUTH - Admin OR matching Client only
+    if (!req.session) {
+      return res.status(401).json({ success: false, message: "No session" });
+    }
+
+    const clientId = parseInt(req.params.id);
+    const sessionClientId = req.session.clientId;
+    const isAdmin = !!req.session.userId && !req.session.clientId;
+    const isClient = !!req.session.clientId && !req.session.userId;
+
+    // Client can ONLY access their own proofs
+    if (isClient && sessionClientId !== clientId) {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
+
+    // No session = unauthorized
+    if (!isAdmin && !isClient) {
+      return res.status(401).json({ success: false, message: "Login required" });
+    }
+
+    console.log(`Fetching proofs for client ${clientId} by ${isAdmin ? 'ADMIN' : 'CLIENT'}`);
+    
     const proofs = await safeQuery(`
       SELECT pp.*, he.company, he.fullname 
       FROM payment_proofs pp 
@@ -1259,14 +1293,18 @@ app.get('/api/clients/:id/proofs', isAuthenticated, async (req, res) => {
       WHERE pp.client_id = ? 
       ORDER BY pp.uploaded_at DESC
     `, [clientId]);
+    
+    console.log(`Found ${proofs.length} proofs`);
     res.json(proofs);
+
   } catch (error) {
     console.error('Proofs error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch proofs' });
   }
 });
 
-// ADMIN PROOFS LIST
+
+// Admin fetching using get method list of POPs
 app.get("/api/payment-proofs", authenticateAdmin, async (req, res) => {
   try {
     const proofs = await safeQuery(`
@@ -1281,6 +1319,232 @@ app.get("/api/payment-proofs", authenticateAdmin, async (req, res) => {
     res.status(500).json({ success: false, error: "Database error" });
   }
 });
+
+// GET PROOFS FOR CLIENT - ALTERNATIVE ENDPOINT (used by ClientDashboard)
+app.get('/api/proofs/client/:clientId', async (req, res) => {
+  try {
+    // INLINE AUTH - Set the flags your code expects
+    if (!req.session) {
+      return res.status(401).json({ success: false, message: "No session" });
+    }
+
+    req.isClient = !!req.session.clientId && !req.session.userId;
+    req.isAdmin = !!req.session.userId && !req.session.clientId;
+    req.clientId = req.session.clientId;
+
+    // Block unauthorized access
+    if (!req.isClient && !req.isAdmin) {
+      return res.status(401).json({ success: false, message: "Login required" });
+    }
+
+    const clientId = parseInt(req.params.clientId);
+    
+    console.log('Proofs endpoint debug:', {
+      clientId: req.clientId,
+      isClient: req.isClient,
+      isAdmin: req.isAdmin,
+      requestedClientId: clientId
+    });
+    
+    //Your exact logic preserved: Allow admins OR client's own proofs
+    if (req.isClient && req.clientId !== clientId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Access denied - cannot view other client's proofs" 
+      });
+    }
+    // Admins bypass the check completely 
+
+    const proofs = await safeQuery(`
+      SELECT pp.id, pp.client_id, pp.file_path, pp.public_url, pp.comment, 
+             pp.uploaded_at, pp.file_type
+      FROM payment_proofs pp 
+      WHERE pp.client_id = ? 
+      ORDER BY pp.uploaded_at DESC
+    `, [clientId]);
+    
+    console.log(`Proofs fetched for client ${clientId}: ${proofs.length} found`);
+    res.json(proofs || []);
+
+  } catch (error) {
+    console.error('Client proofs fetch error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch proofs' });
+  }
+});
+
+
+// Backend - Add these 2 endpoints
+
+// API 1: Get client notifications (NEW)
+app.get('/api/notifications/client/:clientId', async (req, res) => {
+  try {
+    // INLINE AUTH - Set flags your code expects
+    if (!req.session) {
+      return res.status(401).json({ success: false, message: "No session" });
+    }
+
+    req.isClient = !!req.session.clientId && !req.session.userId;
+    req.isAdmin = !!req.session.userId && !req.session.clientId;
+    req.clientId = req.session.clientId;
+
+    if (!req.isClient && !req.isAdmin) {
+      return res.status(401).json({ success: false, message: "Login required" });
+    }
+
+    const clientId = req.isClient ? req.clientId : parseInt(req.params.clientId);
+    
+    console.log('🔍 Notifications debug:', {
+      sessionClientId: req.clientId,
+      isClient: req.isClient,
+      isAdmin: req.isAdmin,
+      requestedClientId: clientId
+    });
+    
+    if (req.isClient && req.clientId !== clientId) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+    
+    const notifications = await safeQuery(`
+      SELECT pn.*, pp.public_url, i.invoice_number 
+      FROM proof_notifications pn
+      JOIN payment_proofs pp ON pn.proof_id = pp.id
+      JOIN invoices i ON pn.invoice_id = i.id
+      WHERE pn.client_id = ?
+      ORDER BY pn.created_at DESC
+      LIMIT 50
+    `, [clientId]);
+    
+    const unreadCount = await safeQuery(
+      `SELECT COUNT(*) as count FROM proof_notifications WHERE client_id = ? AND is_read = FALSE`, 
+      [clientId]
+    );
+    
+    res.json({ 
+      notifications, 
+      unreadCount: unreadCount[0].count 
+    });
+
+  } catch (error) {
+    console.error('Notifications error:', error);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+
+// API 2: Mark notification as read
+app.patch('/api/notifications/:notificationId/read', async (req, res) => {
+  try {
+    // INLINE CLIENT-ONLY AUTH
+    if (!req.session?.clientId || req.session.userId) {
+      return res.status(403).json({ success: false, message: "Client access only" });
+    }
+
+    req.isClient = true;
+    req.clientId = req.session.clientId;
+
+    if (!req.isClient) {
+      return res.status(403).json({ success: false, message: "Admins cannot mark client notifications" });
+    }
+    
+    const result = await safeQuery(
+      `UPDATE proof_notifications SET is_read = TRUE WHERE id = ? AND client_id = ?`,
+      [req.params.notificationId, req.clientId]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Notification not found" });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Mark read error:', error);
+    res.status(500).json({ error: 'Failed to update notification' });
+  }
+});
+
+
+app.get('/api/notifications/client/:clientId', async (req, res) => {
+  try {
+    // INLINE AUTH - Set flags
+    if (!req.session) {
+      return res.status(401).json({ success: false, message: "No session" });
+    }
+
+    req.isClient = !!req.session.clientId && !req.session.userId;
+    req.isAdmin = !!req.session.userId && !req.session.clientId;
+    req.clientId = req.session.clientId;
+
+    if (!req.isClient && !req.isAdmin) {
+      return res.status(401).json({ success: false, message: "Login required" });
+    }
+
+    const clientId = req.isClient ? req.clientId : parseInt(req.params.clientId);
+    
+    if (req.isClient && req.clientId !== clientId) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+    
+    const notifications = await safeQuery(`
+      SELECT pn.*, pp.public_url, i.invoice_number 
+      FROM proof_notifications pn
+      LEFT JOIN payment_proofs pp ON pn.proof_id = pp.id
+      LEFT JOIN invoices i ON pn.invoice_id = i.id
+      WHERE pn.client_id = ?
+      ORDER BY pn.created_at DESC
+      LIMIT 50
+    `, [clientId]);
+    
+    const unreadCount = await safeQuery(
+      `SELECT COUNT(*) as count FROM proof_notifications WHERE client_id = ? AND is_read = FALSE`, 
+      [clientId]
+    );
+    
+    res.json({ 
+      notifications: notifications || [], 
+      unreadCount: unreadCount[0]?.count || 0 
+    });
+  } catch (error) {
+    console.error('Notifications error:', error);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+
+app.patch('/api/notifications/:notificationId/read', async (req, res) => {
+  try {
+    // INLINE CLIENT-ONLY AUTH
+    if (!req.session?.clientId || req.session.userId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Admins cannot mark client notifications - client login required" 
+      });
+    }
+
+    // Set flags your code expects
+    req.isClient = true;
+    req.clientId = req.session.clientId;
+
+    if (!req.isClient) {
+      return res.status(403).json({ success: false, message: "Admins cannot mark client notifications" });
+    }
+    
+    const result = await safeQuery(
+      `UPDATE proof_notifications SET is_read = TRUE WHERE id = ? AND client_id = ?`,
+      [req.params.notificationId, req.clientId]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Notification not found" });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Mark read error:', error);
+    res.status(500).json({ error: 'Failed to update notification' });
+  }
+});
+
+
 // ADMIN LOGIN
 app.post("/login", async (req, res) => {
   try {
@@ -1290,13 +1554,23 @@ app.post("/login", async (req, res) => {
     if (rows.length === 0 || !(await bcrypt.compare(password, rows[0].password))) {
       return res.status(401).json({ success: false, message: "Invalid email or password" });
     }
+    
     req.session.userId = rows[0].id;
     req.session.userType = 'admin';
+    
+    // FOR TRACKING (after session is set)
+    await safeQuery(
+      'INSERT INTO activity_logs (user_type, user_id, action) VALUES (?, ?, ?)',
+      ['admin', req.session.userId, 'login']
+    );
+    console.log(`ADMIN LOGIN TRACKED: User ${req.session.userId}`);
+    
     res.json({ success: true, message: "Login successful", userId: rows[0].id });
   } catch (error) {
     res.status(500).json({ success: false, message: "Login failed" });
   }
 });
+
 //ADMIN NOTIFICATIONS - GET
 app.get("/api/notifications", authenticateAdmin, async (req, res) => {
   try {
@@ -1330,6 +1604,76 @@ app.get("/health", async (req, res) => {
   try {await dbPool.execute("SELECT 1");
     res.json({ status: 'OK',timestamp: new Date().toISOString(),port: PORT,cloudinary: !!cloudinary.config().cloud_name,clients: true,invoices: true,emails: true,notifications: true
     });} catch (error){res.status(503).json({ status: 'ERROR', database: 'unavailable' });}});
+
+
+// Deletes client + ALL related data (invoices, proofs, notifications)
+app.delete('/api/clients/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const clientId = parseInt(req.params.id);
+    console.log('DELETE REQUEST:', { clientId });
+
+    // 1. Get client info FIRST (before deletion)
+    const client = await safeQuery(
+      'SELECT id, company, fullname, lastname, email FROM host_employers WHERE id = ?',
+      [clientId]
+    );
+
+    if (client.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Client not found' 
+      });
+    }
+
+    // 2. COUNT WHAT WE'RE DELETING (for logs)
+    const invoices = await safeQuery('SELECT COUNT(*) as count FROM invoices WHERE client_id = ?', [clientId]);
+    const proofs = await safeQuery('SELECT COUNT(*) as count FROM payment_proofs WHERE client_id = ?', [clientId]);
+    const notifications = await safeQuery('SELECT COUNT(*) as count FROM notifications WHERE message LIKE ?', [`%${clientId}%`]);
+
+    console.log('DELETE SUMMARY:', {
+      client: client[0].company,
+      invoices: invoices[0].count,
+      proofs: proofs[0].count,
+      notifications: notifications[0].count
+    });
+
+    // 3. DELETE IN CORRECT ORDER (child tables FIRST)
+    await safeQuery('DELETE FROM payment_proofs WHERE client_id = ?', [clientId]);
+    await safeQuery('DELETE FROM invoices WHERE client_id = ?', [clientId]);
+    await safeQuery('DELETE FROM notifications WHERE message LIKE ?', [`%${clientId}%`]);
+    
+    // 4. FINALLY DELETE CLIENT
+    const clientResult = await safeQuery('DELETE FROM host_employers WHERE id = ?', [clientId]);
+
+    // 5. Admin notification (SUCCESS)
+    await safeQuery(
+      "INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())",
+      [`Delete Complete: "${client[0].company}" + ${invoices[0].count} invoices, ${proofs[0].count} proofs DELETED`, ADMIN_EMAIL]
+    );
+
+    console.log(`Delete Complete: "${client[0].company}" (ID: ${clientId}) + ALL DATA DELETED`);
+
+    res.json({ 
+      success: true, 
+      message: `Client "${client[0].company}" + all data (${invoices[0].count} invoices, ${proofs[0].count} proofs) DELETED`,
+      deletedSummary: {
+        client: client[0].company,
+        invoices: invoices[0].count,
+        proofs: proofs[0].count,
+        notifications: notifications[0].count
+      }
+    });
+
+  } catch (error) {
+    console.error('DELETE ERROR:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Delete failed: ' + error.message 
+    });
+  }
+});
+
+
 
     // Error handler - CATCHES ALL PROMISE REJECTIONS
 app.use((err, req, res, next) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, CircularProgress, Badge, IconButton, Chip,
@@ -10,7 +10,8 @@ import {
   Notifications as NotificationsIcon,
   Visibility as VisibilityIcon,
   CheckCircle as CheckCircleIcon,
-  Schedule as ScheduleIcon
+  Schedule as ScheduleIcon,
+  Refresh as RefreshIcon
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 
@@ -23,13 +24,15 @@ function Notifications() {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  // 🔵 VIEW OVERLAY STATE
+  // VIEW OVERLAY STATE
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [viewOpen, setViewOpen] = useState(false);
 
-  const fetchNotifications = async () => {
+  // 🔥 OPTIMIZED FETCH WITH CALLBACK
+  const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const res = await fetch("http://localhost:3001/api/notifications", {
         method: "GET",
         credentials: "include",
@@ -37,20 +40,22 @@ function Notifications() {
       if (!res.ok) throw new Error("Failed to fetch notifications");
       const data = await res.json();
       
-      const unread = data.filter(n => n.viewed === 0).length;
+      const unread = Array.isArray(data) ? data.filter(n => n.viewed === 0).length : 0;
       setUnreadCount(unread);
-      setNotifications(data);
+      setNotifications(Array.isArray(data) ? data : []);
       setPage(0);
     } catch (err) {
+      console.error("Fetch notifications error:", err);
       setError(err.message);
+      setNotifications([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchNotifications();
-  }, []);
+  }, [fetchNotifications]);
 
   const handleMarkAsRead = async (id) => {
     try {
@@ -68,16 +73,16 @@ function Notifications() {
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (err) {
       console.error("Mark as read error:", err);
-      fetchNotifications();
+      fetchNotifications(); // Refresh on error
     }
   };
 
-  // 🔵 OPEN OVERLAY + AUTO MARK AS READ
+  // OPEN OVERLAY + AUTO MARK AS READ
   const handleViewNotification = (notification) => {
     setSelectedNotification(notification);
     setViewOpen(true);
 
-    // ✅ AUTO MARK AS READ when viewing
+    // AUTO MARK AS READ when viewing
     if (notification.viewed === 0) {
       handleMarkAsRead(notification.id);
     }
@@ -110,7 +115,7 @@ function Notifications() {
     setPage(0);
   };
 
-  if (loading) {
+  if (loading && notifications.length === 0) {
     return (
       <Box sx={{ 
         minHeight: "100vh", 
@@ -129,7 +134,7 @@ function Notifications() {
     );
   }
 
-  if (error) {
+  if (error && notifications.length === 0) {
     return (
       <Box sx={{ 
         minHeight: "100vh", 
@@ -150,6 +155,7 @@ function Notifications() {
             variant="contained" 
             onClick={fetchNotifications}
             sx={{ borderRadius: 2 }}
+            startIcon={<RefreshIcon />}
           >
             Retry
           </Button>
@@ -167,7 +173,7 @@ function Notifications() {
       position: "relative",
       overflow: "hidden"
     }}>
-      {/* 🔵 FIXED OVERLAY - NO TEXT OVERFLOW */}
+      {/* 🔵 VIEW OVERLAY */}
       {viewOpen && selectedNotification && (
         <Box
           sx={{
@@ -196,10 +202,6 @@ function Notifications() {
               animation: "notifZoomIn 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
               display: "flex",
               flexDirection: "column",
-              "@keyframes notifZoomIn": {
-                "0%": { transform: "scale(0.7)", opacity: 0 },
-                "100%": { transform: "scale(1)", opacity: 1 },
-              },
             }}
           >
             {/* Header */}
@@ -217,7 +219,7 @@ function Notifications() {
 
             <Divider sx={{ mb: 3 }} />
 
-            {/* ✅ FIXED MESSAGE - FULL TEXT WRAPS + SCROLLS */}
+            {/* Message */}
             <Box sx={{ 
               mb: 3, 
               maxHeight: 300,
@@ -225,21 +227,7 @@ function Notifications() {
               p: 2,
               bgcolor: "#f8f9fa",
               borderRadius: 2,
-              border: "1px solid #e0e0e0",
-              "&::-webkit-scrollbar": {
-                width: "6px",
-              },
-              "&::-webkit-scrollbar-track": {
-                background: "#f1f1f1",
-                borderRadius: "10px",
-              },
-              "&::-webkit-scrollbar-thumb": {
-                background: "#c1c1c1",
-                borderRadius: "10px",
-              },
-              "&::-webkit-scrollbar-thumb:hover": {
-                background: "#a8a8a8",
-              }
+              border: "1px solid #e0e0e0"
             }}>
               <Typography sx={{ 
                 lineHeight: 1.6, 
@@ -277,10 +265,10 @@ function Notifications() {
         </Box>
       )}
 
-      {/* HEADER */}
+      {/* 🔥 HEADER WITH REFRESH BUTTON */}
       <Paper 
         sx={{ 
-          bgcolor: "#1976d2", 
+          bgcolor: "#2464a3", 
           color: "white", 
           p: { xs: 2, md: 3 }, 
           borderRadius: 0,
@@ -307,16 +295,44 @@ function Notifications() {
             </Typography>
           </Box>
           
-          <Badge 
-            badgeContent={unreadCount} 
-            color="error"
-            sx={{ 
-              "& .MuiBadge-badge": { fontSize: "1rem", minWidth: 24, height: 24 }
-            }}
-            invisible={unreadCount === 0}
-          >
-            <NotificationsIcon sx={{ fontSize: 32, color: "white" }} />
-          </Badge>
+          {/* 🔥 REFRESH BUTTON + NOTIFICATION BADGE */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            {/* REFRESH BUTTON */}
+            <IconButton 
+              onClick={fetchNotifications}
+              disabled={loading}
+              size="large"
+              sx={{ 
+                color: loading ? "grey.400" : "white",
+                borderRadius: 2,
+                p: 1.5,
+                position: "relative",
+                "&:hover": { 
+                  bgcolor: loading ? "transparent" : "rgba(255,255,255,0.2)",
+                  transform: "scale(1.05)"
+                }
+              }}
+              title={loading ? "Refreshing..." : "Refresh notifications"}
+            >
+              {loading ? (
+                <CircularProgress size={20} thickness={5} sx={{ color: "white" }} />
+              ) : (
+                <RefreshIcon sx={{ fontSize: 28 }} />
+              )}
+            </IconButton>
+
+            {/* NOTIFICATION BADGE */}
+            <Badge 
+              badgeContent={unreadCount} 
+              color="error"
+              sx={{ 
+                "& .MuiBadge-badge": { fontSize: "1rem", minWidth: 24, height: 24 }
+              }}
+              invisible={unreadCount === 0}
+            >
+              <NotificationsIcon sx={{ fontSize: 32, color: "white" }} />
+            </Badge>
+          </Box>
         </Box>
       </Paper>
 
@@ -331,14 +347,7 @@ function Notifications() {
             <Table stickyHeader sx={{ minWidth: 1000 }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: "#f8f9fa", height: 64 }}>
-                  {[
-                    "#",
-                    "Message", 
-                    "Date",
-                    "Time", 
-                    "Status",
-                    "Actions"
-                  ].map((header) => (
+                  {["#", "Message", "Date", "Time", "Status", "Actions"].map((header) => (
                     <TableCell
                       key={header}
                       align={header === "Message" ? "left" : "center"}
@@ -386,7 +395,6 @@ function Notifications() {
                         {rowNumber}
                       </TableCell>
                       
-                      {/* ✅ FIXED TABLE CELL - 3-LINE PREVIEW */}
                       <TableCell sx={{ 
                         fontWeight: isUnread ? 700 : 500, 
                         color: isUnread ? "#1a1a1a" : "#4a4a4a",
@@ -458,6 +466,20 @@ function Notifications() {
                     </TableRow>
                   );
                 })}
+                
+                {paginatedNotifications.length === 0 && !loading && (
+                  <TableRow>
+                    <TableCell colSpan={6} sx={{ py: 8, textAlign: "center" }}>
+                      <NotificationsIcon sx={{ fontSize: 64, color: "action.disabled", mb: 2 }} />
+                      <Typography variant="h6" color="textSecondary" sx={{ mb: 1 }}>
+                        No notifications yet
+                      </Typography>
+                      <Typography variant="body2" color="text.disabled">
+                        Sent invoices and other updates will appear here.
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </TableContainer>
@@ -482,35 +504,6 @@ function Notifications() {
             </Box>
           )}
         </Paper>
-
-        {sortedNotifications.length === 0 && (
-          <Paper sx={{ 
-            mt: 4, 
-            p: 8, 
-            textAlign: "center", 
-            borderRadius: 3, 
-            bgcolor: "#fafafa",
-            border: "2px dashed #e0e0e0",
-            maxWidth: 600,
-            mx: "auto"
-          }}>
-            <NotificationsIcon sx={{ fontSize: 64, color: "#ccc", mb: 3 }} />
-            <Typography variant="h5" sx={{ color: "#666", mb: 2 }}>
-              No notifications yet
-            </Typography>
-            <Typography color="textSecondary" sx={{ mb: 4 }}>
-              Sent invoices and other updates will appear here.
-            </Typography>
-            <Button 
-              variant="outlined" 
-              onClick={fetchNotifications}
-              sx={{ borderRadius: 2, px: 4 }}
-              startIcon={<ScheduleIcon />}
-            >
-              Refresh
-            </Button>
-          </Paper>
-        )}
       </Box>
     </Box>
   );

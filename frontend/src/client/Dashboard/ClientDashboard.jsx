@@ -36,7 +36,7 @@ import {
   Line
 } from "recharts";
 
-// ✅ LIGHT BLUE THEME COLORS - Matching Admin Dashboard
+// LIGHT BLUE THEME COLORS - Matching Admin Dashboard
 const sidebarBg = "#3166AE";
 const sidebarText = "#ffffff";
 const hoverBg = "rgba(255, 255, 255, 0.1)";
@@ -143,7 +143,7 @@ export default function ClientDashboard() {
     if (id) fetchData();
   }, [id]);
 
-  // ✅ PIE CHART DATA - Overall Distribution
+  //PIE CHART DATA - Overall Distribution
   const generatePieData = () => {
     return [
       { name: "Proofs Uploaded", value: proofs.length, fill: CYAN_BAR },
@@ -152,7 +152,7 @@ export default function ClientDashboard() {
     ].filter(item => item.value > 0);
   };
 
-  // ✅ MONTHLY ANALYTICS DATA - Last 12 Months
+  //MONTHLY ANALYTICS DATA - Last 12 Months
   const generateMonthlyData = () => {
     const months = [];
     const now = new Date();
@@ -204,7 +204,7 @@ export default function ClientDashboard() {
   const pieData = generatePieData();
   const monthlyData = generateMonthlyData();
 
-  // ✅ CURRENT MONTH STATS
+  //CURRENT MONTH STATS
   const currentMonthData = monthlyData[monthlyData.length - 1];
   const proofGrowth = monthlyData.length > 1 
     ? ((monthlyData[monthlyData.length - 1].proofs - monthlyData[monthlyData.length - 2].proofs) / Math.max(monthlyData[monthlyData.length - 2].proofs, 1)) * 100

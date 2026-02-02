@@ -14,7 +14,6 @@ import {
   CircularProgress,
   IconButton,
   Chip,
-  Alert,
 } from "@mui/material";
 import {
   Download as DownloadIcon,
@@ -34,7 +33,6 @@ export default function UploadedProofs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  // ✅ PAGINATION STATES
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const navigate = useNavigate();
@@ -59,7 +57,7 @@ export default function UploadedProofs() {
 
       const data = await response.json();
       setProofs(Array.isArray(data) ? data : []);
-      setPage(0); // Reset to first page
+      setPage(0);
     } catch (err) {
       console.error('Fetch error:', err);
       setError(err.message);
@@ -89,7 +87,7 @@ export default function UploadedProofs() {
 
     const link = document.createElement('a');
     link.href = proof.public_url;
-    link.download = `proof-${proof.id || proof.client_id}-${Date.now()}${getFileExtension(proof)}`;
+    link.download = `proof-${proof.id || proof.company || 'unknown'}-${Date.now()}${getFileExtension(proof)}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -120,7 +118,6 @@ export default function UploadedProofs() {
 
   const handleBack = () => navigate("/dashboard");
 
-  // Pagination handlers
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
   };
@@ -130,15 +127,17 @@ export default function UploadedProofs() {
     setPage(0);
   };
 
-  // ✅ CALCULATE ROW NUMBERS (1-N based on total proofs)
   const getRowNumber = (index) => {
     return index + 1 + (page * rowsPerPage);
   };
 
-  // Paginated proofs
+  // ✅ Uses 'company' field from your backend JOIN (he.company)
+  const getCompanyName = (proof) => {
+    return proof.company || proof.company_name || 'Unknown Company';
+  };
+
   const paginatedProofs = proofs.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
-  // Loading state
   if (loading)
     return (
       <Box sx={{ minHeight: "60vh", bgcolor: mainBg, display: "flex", justifyContent: "center", alignItems: "center", p: 2 }}>
@@ -175,7 +174,7 @@ export default function UploadedProofs() {
         <Paper sx={{ p: 3, borderRadius: 2, boxShadow: 1, bgcolor: "white", maxWidth: 420, width: "100%", textAlign: "center" }}>
           <UploadProofIcon sx={{ fontSize: 44, color: "#9e9e9e", mb: 2 }} />
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 1, color: "#1a1a1a" }}>No proofs uploaded</Typography>
-          <Typography variant="body2" sx={{ color: "#666", mb: 3 }}>Clients have not uploaded any payment proofs yet.</Typography>
+          <Typography variant="body2" sx={{ color: "#666", mb: 3 }}>Companies have not uploaded any payment proofs yet.</Typography>
           <Button variant="contained" startIcon={<RefreshIcon />} onClick={fetchProofs} sx={{ borderRadius: 2, textTransform: "none", px: 3 }}>
             Refresh
           </Button>
@@ -185,8 +184,7 @@ export default function UploadedProofs() {
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: mainBg, p: { xs: 2, md: 3 } }}>
-      {/* Header */}
-      <Box sx={{ maxWidth: 1200, mx: "auto", mb: 3 }}>
+      <Box sx={{ maxWidth: 1100, mx: "auto", mb: 3 }}>
         <Box sx={{ mb: 2, display: "flex", alignItems: "center", gap: 2 }}>
           <Button
             variant="text"
@@ -213,33 +211,62 @@ export default function UploadedProofs() {
           </Box>
         </Box>
 
-        {/* ✅ ENTERPRISE TABLE WITH FIXED HEADER */}
-        <Paper sx={{ borderRadius: 2, border: "1px solid #e0e0e0", overflow: "hidden", boxShadow: 2 }}>
-          {/* Fixed Header Bar */}
-          <Box sx={{ position: "sticky", top: 0, zIndex: 10, bgcolor: "#1976d2", p: 2.5, borderBottom: "2px solid #1565c0" }}>
+        <Paper sx={{ 
+          borderRadius: 2, 
+          border: "2px solid #e0e0e0", 
+          overflow: "hidden", 
+          boxShadow: 3,
+          bgcolor: "white"
+        }}>
+          <Box sx={{ 
+            position: "sticky", 
+            top: 0, 
+            zIndex: 10, 
+            bgcolor: "#1976d2", 
+            p: 2.5, 
+            borderBottom: "3px solid #1565c0" 
+          }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: "white", flexShrink: 0 }}>
                 Payment Proofs Directory
               </Typography>
-              <Chip label={`${proofs.length} total`} color="primary" sx={{ bgcolor: "rgba(255,255,255,0.2)", "& .MuiChip-label": { color: "white" } }} />
+              <Chip 
+                label={`${proofs.length} total`} 
+                color="primary" 
+                sx={{ 
+                  bgcolor: "rgba(255,255,255,0.2)", 
+                  "& .MuiChip-label": { color: "white" } 
+                }} 
+              />
             </Box>
           </Box>
 
           <TableContainer sx={{ maxHeight: 600 }}>
             <Table stickyHeader sx={{ minWidth: 1000 }}>
               <TableHead>
-                <TableRow sx={{ bgcolor: "#f8f9fa", height: 56 }}>
-                  {["#", "Date", "Time", "Proof Count", "Client ID", "Comment", "Actions"].map((header) => (
+                <TableRow sx={{ bgcolor: "#f8f9fa", height: 60 }}>
+                  {["#", "Company", "Date", "Time", "Comment", "Actions"].map((header) => (
                     <TableCell 
                       key={header}
                       sx={{
                         fontWeight: 700,
-                        fontSize: "0.9rem",
+                        fontSize: "0.95rem",
                         color: "#212121",
-                        borderBottom: "2px solid #e0e0e0",
-                        py: 2,
+                        border: "2px solid #e0e0e0",
+                        borderTop: "none",
+                        py: 2.5,
                         whiteSpace: "nowrap",
                         backgroundColor: "#f8f9fa !important",
+                        position: "relative",
+                        "&:before": {
+                          content: '""',
+                          position: "absolute",
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          height: "2px",
+                          bgcolor: "#1976d2",
+                        }
                       }}
                     >
                       {header}
@@ -259,61 +286,95 @@ export default function UploadedProofs() {
                     <TableRow
                       key={proof.id || index}
                       sx={{
-                        height: 64,
-                        borderBottom: "1px solid #f0f0f0",
+                        height: 70,
                         bgcolor: "white",
                         transition: "none",
                         "&:hover": { bgcolor: "#f8f9fa" },
+                        "& td": {
+                          borderLeft: "1px solid #e0e0e0",
+                          borderRight: "1px solid #e0e0e0",
+                          borderBottom: "1px solid #e0e0e0",
+                        },
+                        "&:last-child td": {
+                          borderBottom: "2px solid #e0e0e0",
+                        }
                       }}
                     >
                       {/* Row Number */}
-                      <TableCell align="center" sx={{ fontWeight: 600, color: "#424242", width: 70 }}>
+                      <TableCell align="center" sx={{ 
+                        fontWeight: 700, 
+                        color: "#424242", 
+                        width: 70,
+                        fontSize: "1rem",
+                        borderLeft: "none !important"
+                      }}>
                         {rowNumber}
                       </TableCell>
                       
-                      {/* Date */}
-                      <TableCell align="center" sx={{ fontWeight: 500, color: "#424242", fontSize: "0.9rem" }}>
-                        {date}
-                      </TableCell>
-                      
-                      {/* Time */}
-                      <TableCell align="center" sx={{ fontWeight: 500, color: "#616161", fontSize: "0.85rem" }}>
-                        {time}
-                      </TableCell>
-                      
-                      {/* Proof Count */}
-                      <TableCell align="center" sx={{ fontWeight: 600, color: "#1976d2", fontSize: "0.95rem" }}>
-                        1
-                      </TableCell>
-                      
-                      {/* Client ID */}
-                      <TableCell align="center">
+                      {/* Company (from he.company JOIN) */}
+                      <TableCell sx={{ 
+                        fontWeight: 600, 
+                        color: "#1976d2", 
+                        fontSize: "0.95rem",
+                        borderRight: "none !important"
+                      }}>
                         <Chip
-                          label={`#${proof.client_id}`}
+                          label={getCompanyName(proof)}
                           size="small"
                           sx={{
                             fontWeight: 700,
                             fontSize: "0.8rem",
-                            height: 28,
+                            height: 32,
                             bgcolor: "#e3f2fd",
                             color: "#1976d2",
+                            border: "1px solid #bbdefb",
                           }}
                         />
                       </TableCell>
                       
+                      {/* Date */}
+                      <TableCell align="center" sx={{ 
+                        fontWeight: 600, 
+                        color: "#424242", 
+                        fontSize: "0.95rem" 
+                      }}>
+                        {date}
+                      </TableCell>
+                      
+                      {/* Time */}
+                      <TableCell align="center" sx={{ 
+                        fontWeight: 500, 
+                        color: "#616161", 
+                        fontSize: "0.9rem" 
+                      }}>
+                        {time}
+                      </TableCell>
+                      
                       {/* Comment */}
-                      <TableCell sx={{ fontWeight: 500, color: "#212121", maxWidth: 250 }}>
+                      <TableCell sx={{ 
+                        fontWeight: 500, 
+                        color: "#212121", 
+                        maxWidth: 250,
+                        borderRight: "none !important"
+                      }}>
                         {proof.comment || "No comment"}
                       </TableCell>
                       
                       {/* Actions */}
-                      <TableCell align="center" sx={{ py: 1 }}>
+                      <TableCell align="center" sx={{ 
+                        py: 1,
+                        borderRight: "none !important"
+                      }}>
                         <Box sx={{ display: "flex", gap: 0.5 }}>
                           <IconButton
                             onClick={() => handleViewProof(proof)}
                             title="View proof"
                             size="small"
-                            sx={{ color: "#1976d2", "&:hover": { bgcolor: "rgba(25, 118, 210, 0.08)" } }}
+                            sx={{ 
+                              color: "#1976d2", 
+                              "&:hover": { bgcolor: "rgba(25, 118, 210, 0.08)" },
+                              border: "1px solid rgba(25, 118, 210, 0.2)",
+                            }}
                           >
                             <VisibilityIcon fontSize="small" />
                           </IconButton>
@@ -321,7 +382,11 @@ export default function UploadedProofs() {
                             onClick={() => handleDownloadProof(proof)}
                             title="Download proof"
                             size="small"
-                            sx={{ color: "#4caf50", "&:hover": { bgcolor: "rgba(76, 175, 80, 0.08)" } }}
+                            sx={{ 
+                              color: "#4caf50", 
+                              "&:hover": { bgcolor: "rgba(76, 175, 80, 0.08)" },
+                              border: "1px solid rgba(76, 175, 80, 0.2)",
+                            }}
                           >
                             <DownloadIcon fontSize="small" />
                           </IconButton>
@@ -334,8 +399,11 @@ export default function UploadedProofs() {
             </Table>
           </TableContainer>
 
-          {/* ✅ PAGINATION */}
-          <Box sx={{ p: 2, borderTop: "1px solid #e0e0e0", bgcolor: "#fafafa" }}>
+          <Box sx={{ 
+            p: 2.5, 
+            borderTop: "2px solid #e0e0e0", 
+            bgcolor: "#fafafa"
+          }}>
             <TablePagination
               rowsPerPageOptions={[5, 10, 25]}
               component="div"
@@ -346,11 +414,25 @@ export default function UploadedProofs() {
               onRowsPerPageChange={handleChangeRowsPerPage}
               sx={{
                 "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
-                  fontSize: "0.85rem",
+                  fontSize: "0.9rem",
                   color: "#424242",
+                  fontWeight: 500
+                },
+                "& .MuiTablePagination-select": {
+                  border: "1px solid #e0e0e0",
+                  borderRadius: 1
                 },
                 "& .MuiTablePagination-actions": {
                   marginLeft: "auto",
+                },
+                "& .MuiTablePagination-actions button": {
+                  border: "1px solid #e0e0e0",
+                  borderRadius: 1,
+                  color: "#1976d2",
+                  "&:hover": {
+                    bgcolor: "rgba(25, 118, 210, 0.08)",
+                    borderColor: "#1976d2"
+                  }
                 }
               }}
             />

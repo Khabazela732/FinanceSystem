@@ -1,5 +1,4 @@
-//  Dynamic status based on button clicked!
-import React, { useState, useCallback, useMemo, memo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -12,9 +11,9 @@ import {
   FormHelperText,
   Paper,
   Snackbar,
+  Alert,
   CircularProgress,
   InputAdornment,
-  Card,
   Divider,
   Chip,
   Fade
@@ -28,9 +27,10 @@ import {
   MonetizationOn as MonetizationIcon,
   AccountBalanceWallet as WalletIcon,
   Send as SendIcon,
-  Save as SaveIcon
+  Save as SaveIcon,
+  Edit as EditIcon
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 
 const mainBg = "#f8f9fa";
@@ -41,7 +41,7 @@ const inputStyle = {
   mb: 2.5,
   "& .MuiOutlinedInput-root": {
     borderRadius: 2,
-    py: 1.5,
+    py: 1.75,
     fontSize: "0.95rem",
     bgcolor: "white",
     "& .MuiOutlinedInput-notchedOutline": {
@@ -68,9 +68,15 @@ const inputStyle = {
   },
 };
 
-const InvoiceForm = memo(() => {
+const InvoiceForm = () => {
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('edit');
+  const [loadingEdit, setLoadingEdit] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+
   const [clients, setClients] = useState([]);
   const [loadingClients, setLoadingClients] = useState(true);
+  const [loadingInvoiceNumber, setLoadingInvoiceNumber] = useState(false);
   const [form, setForm] = useState({
     company_name: "",
     invoice_number: "",
@@ -80,12 +86,86 @@ const InvoiceForm = memo(() => {
     due_date: "",
     amount: "",
     amount_due: "",
+    retainer_fee: "",
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMsg, setSnackbarMsg] = useState("");
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    severity: "success",
+    message: "",
+  });
   const navigate = useNavigate();
+
+  //LOAD EXISTING INVOICE FOR EDITING (Drafts work perfectly here)
+  const loadInvoiceForEdit = useCallback(async (id) => {
+    if (!id) return;
+    
+    setLoadingEdit(true);
+    try {
+      const res = await axios.get(`http://localhost:3001/api/invoices/${id}`, {
+        withCredentials: true,
+      });
+      
+      const invoice = res.data;
+      setForm({
+        company_name: invoice.company_name || "",
+        invoice_number: invoice.invoice_number || "",
+        customer_reference: invoice.customer_reference || "",
+        client_id: invoice.client_id?.toString() || "",
+        invoice_date: invoice.invoice_date ? new Date(invoice.invoice_date).toISOString().split('T')[0] : "",
+        due_date: invoice.due_date ? new Date(invoice.due_date).toISOString().split('T')[0] : "",
+        amount: invoice.amount?.toString() || "",
+        amount_due: invoice.amount_due?.toString() || "",
+        retainer_fee: invoice.retainer_fee?.toString() || "",
+      });
+      
+      setIsEditMode(true);
+    } catch (err) {
+      console.error("Error loading invoice:", err);
+      setSnackbar({ open: true, severity: "error", message: "Failed to load invoice for editing" });
+    } finally {
+      setLoadingEdit(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (editId) {
+      loadInvoiceForEdit(editId);
+    }
+  }, [editId, loadInvoiceForEdit]);
+
+  //GENERATE INVOICE NUMBER (NEW invoices only)
+  const generateInvoiceNumber = useCallback(async () => {
+    if (isEditMode) return;
+    
+    setLoadingInvoiceNumber(true);
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      
+      const res = await axios.get("http://localhost:3001/api/invoices/number", {
+        withCredentials: true
+      });
+      
+      const seq = res.data?.number || Math.floor(Math.random() * 9999) + 1;
+      const invoiceNum = `INV-${year}${month}${day}-${String(seq).padStart(4, '0')}`;
+      
+      setForm(prev => ({ ...prev, invoice_number: invoiceNum }));
+    } catch (err) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const seq = Math.floor(1000 + Math.random() * 9000);
+      const invoiceNum = `INV-${year}${month}${day}-${String(seq).padStart(4, '0')}`;
+      setForm(prev => ({ ...prev, invoice_number: invoiceNum }));
+    } finally {
+      setLoadingInvoiceNumber(false);
+    }
+  }, [isEditMode]);
 
   const fetchClients = useCallback(async () => {
     try {
@@ -99,8 +179,7 @@ const InvoiceForm = memo(() => {
       const msg = err?.response?.status === 401 
         ? "Please login to create invoices" 
         : "Failed to load clients.";
-      setSnackbarMsg(msg);
-      setSnackbarOpen(true);
+      setSnackbar({ open: true, severity: "error", message: msg });
       if (err?.response?.status === 401) {
         setTimeout(() => navigate("/login?return=/invoices/new"), 1500);
       }
@@ -109,9 +188,12 @@ const InvoiceForm = memo(() => {
     }
   }, [navigate]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     fetchClients();
-  }, [fetchClients]);
+    if (!editId) {
+      generateInvoiceNumber();
+    }
+  }, [fetchClients, generateInvoiceNumber, editId]);
 
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
@@ -134,7 +216,7 @@ const InvoiceForm = memo(() => {
   const validate = useCallback(() => {
     const errs = {};
     if (!form.company_name?.trim()) errs.company_name = "Company name required";
-    if (!form.invoice_number?.trim()) errs.invoice_number = "Document no required";
+    if (!form.invoice_number?.trim()) errs.invoice_number = "Invoice number required";
     if (!form.client_id) errs.client_id = "Client required";
     if (!form.invoice_date) errs.invoice_date = "Invoice date required";
     if (!form.due_date) errs.due_date = "Due date required";
@@ -142,12 +224,14 @@ const InvoiceForm = memo(() => {
       errs.amount = "Valid total amount required";
     if (!form.amount_due || isNaN(Number(form.amount_due)) || Number(form.amount_due) < 0)
       errs.amount_due = "Valid amount due required";
+    if (form.retainer_fee && (isNaN(Number(form.retainer_fee)) || Number(form.retainer_fee) < 0))
+      errs.retainer_fee = "Valid retainer fee required";
 
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }, [form]);
 
-  // FIXED: Dynamic status from button!
+  // 🔥 PERFECT DRAFT/SENT PAYLOAD - MATCHES BACKEND EXPECTATIONS
   const createPayload = useCallback((status) => ({
     company_name: form.company_name?.trim() || "",
     invoice_number: form.invoice_number?.trim() || "",
@@ -157,113 +241,150 @@ const InvoiceForm = memo(() => {
     due_date: form.due_date || "",
     amount: parseFloat(form.amount) || 0,
     amount_due: parseFloat(form.amount_due) || 0,
-    status: status  //  DYNAMIC: "draft" OR "sent"
+    retainer_fee: parseFloat(form.retainer_fee) || 0,
+    status: status  // 🔥 "draft" or "sent" - PERFECT for DraftInvoices filter
   }), [form]);
 
-  // FIXED: Pass status parameter
   const submitInvoice = useCallback(async (status) => {
     if (!validate()) return;
     setSubmitting(true);
 
     try {
-      const payload = createPayload(status);  // ✅ Gets correct status!
-      
+      const payload = createPayload(status);
       const cleanPayload = {
         ...payload,
         client_id: Number(payload.client_id),
         amount: Number(payload.amount),
-        amount_due: Number(payload.amount_due)
+        amount_due: Number(payload.amount_due),
+        retainer_fee: Number(payload.retainer_fee)
       };
 
-      console.log("Sending payload:", cleanPayload);
-
-      await axios.post("http://localhost:3001/api/invoices", cleanPayload, {
-        withCredentials: true,
-        timeout: 10000
-      });
-
-      // CORRECT MESSAGE BASED ON BUTTON
-      const message = status === "draft" 
-        ? "Invoice saved as draft!" 
-        : "Invoice sent successfully! Client notified via email.";
-      
-      setSnackbarMsg(message);
-      setSnackbarOpen(true);
-      setTimeout(() => {
-        setSnackbarOpen(false);
-        navigate("/invoices");
-      }, 1800);
-    } catch (err) {
-      console.error("🚨 Invoice submit error:", err.response?.data || err);
-      const serverMsg = err?.response?.data?.message || "Failed to create invoice";
-      setSnackbarMsg(serverMsg);
-      setSnackbarOpen(true);
-      
-      if (err?.response?.status === 401) {
-        setTimeout(() => navigate("/login?return=/invoices/new"), 1500);
+      let response;
+      if (isEditMode && editId) {
+        response = await axios.put(`http://localhost:3001/api/invoices/${editId}`, cleanPayload, {
+          withCredentials: true,
+          timeout: 10000
+        });
+        setSnackbar({ 
+          open: true, 
+          severity: "success", 
+          message: `Invoice ${payload.invoice_number} updated as ${status}!` 
+        });
+      } else {
+        response = await axios.post("http://localhost:3001/api/invoices", cleanPayload, {
+          withCredentials: true,
+          timeout: 10000
+        });
+        setSnackbar({ 
+          open: true, 
+          severity: "success", 
+          message: `Invoice ${payload.invoice_number} ${status === "draft" ? "saved as draft" : "sent successfully"}!` 
+        });
       }
+
+      setTimeout(() => {
+        setSnackbar(prev => ({ ...prev, open: false }));
+        navigate("/invoices");
+      }, 2500);
+    } catch (err) {
+      console.error("Invoice submit error:", err.response?.data || err);
+      setSnackbar({ 
+        open: true, 
+        severity: "error", 
+        message: err?.response?.data?.message || "Failed to save invoice" 
+      });
     } finally {
       setSubmitting(false);
     }
-  }, [form, navigate, validate, createPayload]);
+  }, [form, navigate, validate, createPayload, isEditMode, editId]);
 
   const handleSaveDraft = useCallback((e) => {
     e.preventDefault();
-    submitInvoice("draft");  // ✅ Sends "draft"
+    submitInvoice("draft");  // 🔥 SENDS status: "draft" → DraftInvoices shows it!
   }, [submitInvoice]);
 
   const handleCreateAndSend = useCallback((e) => {
     e.preventDefault();
-    submitInvoice("sent");   // ✅ Sends "sent" 
+    submitInvoice("sent");   // 🔥 SENDS status: "sent" → Goes to All Invoices
   }, [submitInvoice]);
 
   const clientsCount = useMemo(() => clients.length, [clients]);
+  const hasErrors = Object.keys(errors).length > 0;
 
   return (
     <Fade in timeout={600}>
-      <Box sx={{ flexGrow: 1, p: { xs: 2.5, sm: 3, md: 4 }, mt: "72px", bgcolor: mainBg, minHeight: "100vh" }}>
-        {/* Back Button */}
-        <Box sx={{ mb: 2 }}>
+      <Box sx={{ flexGrow: 1, p: { xs: 3, md: 4 }, mt: "72px", bgcolor: mainBg, minHeight: "100vh" }}>
+        <Box sx={{ mb: 4 }}>
           <Button
             variant="text"
             startIcon={<ArrowBackIcon />}
             onClick={() => navigate(-1)}
             sx={{
-              fontWeight: 600, color: primaryBlue, fontSize: 14, px: 0,
-              textTransform: "none", "&:hover": { bgcolor: `${primaryBlue}10`, color: `${primaryBlue}E0` }
+              fontWeight: 600, 
+              color: primaryBlue, 
+              fontSize: "0.95rem",
+              px: 0,
+              textTransform: "none", 
+              "&:hover": { bgcolor: `${primaryBlue}10` }
             }}
           >
             Back to invoices
           </Button>
         </Box>
 
-        <Card elevation={4} sx={{ maxWidth: 720, mx: "auto", borderRadius: 3, boxShadow: "0 12px 40px rgba(0,0,0,0.12)", border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
-          {/* Header */}
-          <Box sx={{ px: { xs: 2.5, md: 3 }, py: 2.5, bgcolor: "white", borderBottom: "1px solid", borderColor: "divider", display: "flex", alignItems: "center", gap: 2 }}>
-            <Box sx={{ width: 48, height: 48, borderRadius: "30%", bgcolor: `${primaryBlue}12`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <MonetizationIcon sx={{ fontSize: 22, color: primaryBlue }} />
-            </Box>
-            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-              <Typography variant="h5" fontWeight={700} sx={{ color: darkText, lineHeight: 1.2 }}>
-                New tax invoice
-              </Typography>
-              <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
-                Create professional invoices for your clients
-              </Typography>
+        <Paper 
+          elevation={3} 
+          sx={{ 
+            maxWidth: 600, 
+            mx: "auto", 
+            borderRadius: 3, 
+            overflow: "hidden",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.12)",
+            border: "1px solid", 
+            borderColor: "divider"
+          }}
+        >
+          <Box sx={{ px: { xs: 3, md: 4 }, py: 3, bgcolor: "white", borderBottom: "1px solid", borderColor: "divider" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <Box sx={{ 
+                width: 48, 
+                height: 48, 
+                borderRadius: 2, 
+                bgcolor: `${primaryBlue}12`, 
+                display: "flex", 
+                alignItems: "center", 
+                justifyContent: "center" 
+              }}>
+                {isEditMode ? (
+                  <EditIcon sx={{ fontSize: 24, color: "#ff9800" }} />
+                ) : (
+                  <MonetizationIcon sx={{ fontSize: 24, color: primaryBlue }} />
+                )}
+              </Box>
+              <Box>
+                <Typography variant="h6" fontWeight={700} sx={{ color: darkText }}>
+                  {isEditMode ? "Edit Invoice" : "New Invoice"}
+                </Typography>
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  {isEditMode 
+                    ? `Editing invoice ${form.invoice_number || '...'}` 
+                    : "Create professional tax invoice"
+                  }
+                </Typography>
+              </Box>
             </Box>
           </Box>
 
-          {/* 🚀 FIXED: Two separate handlers, no form submit */}
-          <Box sx={{ px: { xs: 2.5, md: 3 }, py: 2.5 }}>
-            {loadingClients ? (
+          <Box sx={{ px: { xs: 3, md: 4 }, py: 4 }}>
+            {(loadingClients || loadingEdit) ? (
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 8 }}>
-                <CircularProgress size={24} sx={{ mr: 2 }} />
-                <Typography>Loading clients...</Typography>
+                <CircularProgress size={28} sx={{ mr: 2, color: primaryBlue }} />
+                <Typography>{loadingEdit ? "Loading invoice..." : "Loading clients..."}</Typography>
               </Box>
             ) : (
               <>
                 <FormControl fullWidth error={!!errors.client_id} sx={{ mb: 2.5 }}>
-                  <InputLabel sx={{ color: darkText, fontWeight: 600, fontSize: "0.95rem" }}>Client Company *</InputLabel>
+                  <InputLabel>Client Company *</InputLabel>
                   <Select
                     name="client_id"
                     value={form.client_id}
@@ -271,9 +392,11 @@ const InvoiceForm = memo(() => {
                     label="Client Company"
                     sx={inputStyle}
                   >
-                    <MenuItem value="" disabled sx={{ fontStyle: "italic" }}>Select a client company</MenuItem>
+                    <MenuItem value="" disabled sx={{ fontStyle: "italic" }}>
+                      Select a client company
+                    </MenuItem>
                     {clients.map((client) => (
-                      <MenuItem key={client.id} value={client.id} sx={{ py: 1.25 }}>
+                      <MenuItem key={client.id} value={client.id} sx={{ py: 1.5 }}>
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                           <BusinessIcon sx={{ color: primaryBlue, fontSize: 20 }} />
                           <Box>
@@ -287,19 +410,63 @@ const InvoiceForm = memo(() => {
                   {errors.client_id && <FormHelperText sx={{ color: "#d32f2f", fontWeight: 500 }}>{errors.client_id}</FormHelperText>}
                 </FormControl>
 
-                <TextField
-                  label="Invoice Number *"
-                  name="invoice_number"
-                  value={form.invoice_number}
-                  onChange={handleChange}
-                  required
-                  error={!!errors.invoice_number}
-                  helperText={errors.invoice_number}
-                  placeholder="INV-2025-001"
-                  fullWidth
-                  InputProps={{ startAdornment: <InputAdornment position="start"><DocumentIcon sx={{ color: primaryBlue }} /></InputAdornment> }}
-                  sx={inputStyle}
-                />
+<TextField
+  label="Invoice Number *"
+  name="invoice_number"
+  value={form.invoice_number}
+  onChange={undefined}  // ✅ Completely disables typing
+  error={!!errors.invoice_number}
+  helperText={errors.invoice_number || `Generated today: ${new Date().toLocaleDateString('en-ZA')}`}
+  fullWidth
+  disabled={!isEditMode}  // ✅ Fully disabled when not in edit mode
+  InputProps={{
+    readOnly: true,  // ✅ Extra layer of protection
+    startAdornment: (
+      <>
+        <InputAdornment position="start">
+          <DocumentIcon sx={{ color: primaryBlue }} />
+        </InputAdornment>
+        {loadingInvoiceNumber && (
+          <CircularProgress size={20} sx={{ ml: 2, color: primaryBlue }} />
+        )}
+      </>
+    )
+  }}
+  sx={{
+    ...inputStyle,
+    "& .MuiOutlinedInput-root": {
+      ...inputStyle["& .MuiOutlinedInput-root"],
+      bgcolor: loadingInvoiceNumber ? `${primaryBlue}04` : !isEditMode ? `${primaryBlue}02` : "white",  // ✅ Visual cue when disabled
+      opacity: !isEditMode ? 0.7 : 1
+    },
+    "& .MuiInputLabel-root": {
+      color: !isEditMode ? `${primaryBlue}600` : "inherit"
+    }
+  }}
+/>
+
+{!isEditMode && (
+  <Button
+    fullWidth
+    variant="contained"
+    onClick={generateInvoiceNumber}
+    disabled={loadingInvoiceNumber}
+    sx={{
+      mb: 2.5,
+      height: 48,
+      borderRadius: 2,
+      fontSize: "0.9rem",
+      fontWeight: 600,
+      textTransform: "none",
+      bgcolor: primaryBlue,
+      "&:hover": { bgcolor: `${primaryBlue}800` },
+      boxShadow: "0 2px 8px rgba(59, 130, 246, 0.3)"
+    }}
+  >
+    {loadingInvoiceNumber ? "Generating..." : "🔄 Generate Invoice Number"}
+  </Button>
+)}
+
 
                 <TextField
                   label="Customer Reference"
@@ -375,69 +542,102 @@ const InvoiceForm = memo(() => {
                   }}
                   sx={inputStyle}
                 />
+
+                <TextField
+                  label="Retainer Fee (Optional)"
+                  name="retainer_fee"
+                  type="number"
+                  value={form.retainer_fee}
+                  onChange={handleChange}
+                  error={!!errors.retainer_fee}
+                  helperText={errors.retainer_fee || "Amount held as retainer (leave blank if none)"}
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><MonetizationIcon sx={{ color: primaryBlue }} /></InputAdornment>,
+                    inputProps: { step: "0.01" }
+                  }}
+                  sx={inputStyle}
+                />
               </>
             )}
           </Box>
 
           <Divider />
-          <Box sx={{ px: { xs: 2.5, md: 3 }, py: 2, bgcolor: "grey.50", display: "flex", gap: 2, justifyContent: "flex-end", alignItems: "center" }}>
-            <Chip label={loadingClients ? 'Loading...' : `${clientsCount} Clients Available`} color="primary" variant="outlined" size="small" sx={{ fontWeight: 600 }} />
-            <Box sx={{ display: "flex", gap: 1.5 }}>
-              {/* 🚀 ✅ Save Draft Button */}
+          <Box sx={{ px: { xs: 3, md: 4 }, py: 3, bgcolor: "grey.50", display: "flex", gap: 2, justifyContent: "flex-end", alignItems: "center" }}>
+            <Chip 
+              label={loadingClients ? 'Loading...' : `${clientsCount} Clients`} 
+              color="primary" 
+              variant="outlined" 
+              size="small"
+              sx={{ fontWeight: 600 }} 
+            />
+            <Box sx={{ display: "flex", gap: 2 }}>
               <Button
                 onClick={handleSaveDraft}
-                disabled={submitting || loadingClients}
+                disabled={submitting || loadingClients || loadingEdit}
                 variant="outlined"
                 size="medium"
                 startIcon={<SaveIcon />}
                 sx={{
-                  minWidth: 140, borderRadius: 2, fontSize: 14, fontWeight: 600,
-                  color: darkText, borderColor: "text.secondary", textTransform: "none",
-                  "&:hover": { borderColor: primaryBlue, bgcolor: `${primaryBlue}08`, color: primaryBlue }
+                  minWidth: 140, 
+                  borderRadius: 2, 
+                  fontSize: "0.9rem",
+                  fontWeight: 600,
+                  textTransform: "none",
+                  "&:hover": { borderColor: primaryBlue, bgcolor: `${primaryBlue}08` }
                 }}
               >
-                {submitting ? "Saving..." : "💾 Save Draft"}
+                {submitting ? "Saving..." : isEditMode ? "💾 Update Draft" : "💾 Save Draft"}
               </Button>
               
-              {/* 🚀 ✅ Send Invoice Button */}
               <Button
                 onClick={handleCreateAndSend}
-                disabled={submitting || loadingClients}
+                disabled={submitting || loadingClients || loadingEdit || hasErrors}
                 variant="contained"
                 size="medium"
                 startIcon={<SendIcon />}
                 sx={{
-                  minWidth: 160, borderRadius: 2, fontSize: 14, fontWeight: 700,
-                  textTransform: "none", px: 3,
-                  bgcolor: `linear-gradient(135deg, ${primaryBlue} 0%, #1565c0 100%)`,
-                  boxShadow: "0 8px 32px rgba(25, 118, 210, 0.4)",
-                  "&:hover": { bgcolor: primaryBlue, background: `linear-gradient(135deg, ${primaryBlue} 0%, #0d47a1 100%)` }
+                  minWidth: 160, 
+                  borderRadius: 2, 
+                  fontSize: "0.9rem",
+                  fontWeight: 700,
+                  textTransform: "none",
+                  px: 3,
+                  bgcolor: primaryBlue,
+                  boxShadow: "0 8px 32px rgba(25,118,210,0.3)",
+                  "&:hover": { bgcolor: "#1565c0" },
+                  "&:disabled": { bgcolor: "grey.300" }
                 }}
               >
                 {submitting ? (
                   <>
                     <CircularProgress size={18} color="inherit" sx={{ mr: 1 }} />
-                    Sending...
+                    {isEditMode ? "Updating..." : "Sending..."}
                   </>
                 ) : (
-                  "📧 Send Invoice"
+                  isEditMode ? "📧 Update & Send" : "📧 Send Invoice"
                 )}
               </Button>
             </Box>
           </Box>
-        </Card>
+        </Paper>
 
         <Snackbar
-          open={snackbarOpen}
-          onClose={() => setSnackbarOpen(false)}
+          open={snackbar.open}
           autoHideDuration={4000}
-          message={snackbarMsg}
-          sx={{ "& .MuiSnackbarContent-root": { bgcolor: primaryBlue } }}
-        />
+          onClose={(e, reason) => {
+            if (reason === "clickaway") return;
+            setSnackbar(prev => ({ ...prev, open: false }));
+          }}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} severity={snackbar.severity}>
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
       </Box>
     </Fade>
   );
-});
+};
 
-InvoiceForm.displayName = "InvoiceForm";
 export default InvoiceForm;

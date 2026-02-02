@@ -1,4 +1,4 @@
-// ClientInvoicesPage.jsx - PROFESSIONAL INVOICES LIST WITH DOWNLOAD/PRINT
+// ClientInvoicesPage.jsx - FIXED: Works WITHOUT Admin Login
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -41,6 +41,8 @@ import {
 } from "@mui/icons-material";
 import InvoicePrintView from "../../admin/Dashboard/Invoices/InvoicePrintView";
 
+const API_BASE = "http://localhost:3001";
+
 // ✅ LIGHT BLUE THEME COLORS - Matching Admin Dashboard
 const sidebarBg = "#3166AE";
 const sidebarText = "#ffffff";
@@ -80,85 +82,67 @@ const navButtonStyle = (active) => ({
 export default function ClientInvoicesPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const clientId = id; // Extract client ID from URL
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [invoices, setInvoices] = useState([]);
-  const [loadingInvoices, setLoadingInvoices] = useState(true);
+  const [proofs, setProofs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [fullInvoice, setFullInvoice] = useState(null);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
-  const [client, setClient] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedMenuInvoice, setSelectedMenuInvoice] = useState(null);
-  const [proofStatusMap, setProofStatusMap] = useState({});
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   const closeSidebar = () => setSidebarOpen(false);
 
-  // Fetch Invoices
-  useEffect(() => {
-    async function fetchInvoices() {
-      setLoadingInvoices(true);
-      try {
-        const res = await fetch("http://localhost:3001/api/invoices", {
-          credentials: "include",
-          headers: { "Cache-Control": "no-cache" }
-        });
-        
-        if (res.ok) {
-          const allInvoices = await res.json();
-          const clientInvoices = Array.isArray(allInvoices)
-            ? allInvoices.filter(inv => String(inv.client_id) === String(id))
-            : [];
-          
-          // Sort by created date (newest first)
-          clientInvoices.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
-          
-          setInvoices(clientInvoices);
-          
-          // Get client info from first invoice
-          if (clientInvoices.length > 0) {
-            setClient(clientInvoices[0]);
-          }
-          
-          // Fetch proof status for each invoice
-          fetchProofStatus(clientInvoices);
-        } else {
-          setInvoices([]);
-        }
-      } catch (error) {
-        console.error("Invoices fetch error:", error);
-        setInvoices([]);
-      } finally {
-        setLoadingInvoices(false);
-      }
-    }
-    
-    if (id) fetchInvoices();
-  }, [id]);
-
-  // Fetch proof of payment status for invoices
-  const fetchProofStatus = async (invoicesList) => {
+  //fetchInvoices - PUBLIC ENDPOINTS (No Admin Required!)
+  const fetchInvoices = async () => {
     try {
-      const res = await fetch(`http://localhost:3001/api/payment-proofs?client_id=${id}`, {
-        credentials: "include"
-      });
-      
-      if (res.ok) {
-        const proofs = await res.json();
-        const statusMap = {};
-        
-        // Map invoice IDs to proof status
-        invoicesList.forEach(invoice => {
-          const hasProof = Array.isArray(proofs) && proofs.some(proof => String(proof.invoice_id) === String(invoice.id));
-          statusMap[invoice.id] = hasProof ? 'paid' : 'pending';
-        });
-        
-        setProofStatusMap(statusMap);
-      }
+      setLoading(true);
+      setError(null);
+
+      // Works WITHOUT admin login!
+      const invoicesRes = await fetch(`${API_BASE}/api/client/${clientId}/invoices/public`);
+      const proofsRes = await fetch(`${API_BASE}/api/client/${clientId}/proofs/public`);
+
+      if (!invoicesRes.ok) throw new Error('Failed to load invoices');
+      if (!proofsRes.ok) throw new Error('Failed to load proofs');
+
+      const invoicesData = await invoicesRes.json();
+      const proofsData = await proofsRes.json();
+
+      // Sort invoices by newest first
+      const sortedInvoices = Array.isArray(invoicesData) 
+        ? invoicesData.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date))
+        : [];
+
+      setInvoices(sortedInvoices);
+      setProofs(Array.isArray(proofsData) ? proofsData : []);
+
     } catch (error) {
-      console.error("Proof status fetch error:", error);
+      console.error('Client invoices error:', error);
+      setError('Failed to load your invoices. Please try again.');
+      setInvoices([]);
+      setProofs([]);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // Load invoices on mount and when clientId changes
+  useEffect(() => {
+    if (clientId) {
+      fetchInvoices();
+    }
+  }, [clientId]);
+
+  // Get proof status for invoice
+  const getProofStatus = (invoiceId) => {
+    const hasProof = proofs.some(proof => String(proof.invoice_id) === String(invoiceId));
+    return hasProof ? 'paid' : 'pending';
   };
 
   // Get status color
@@ -174,17 +158,17 @@ export default function ClientInvoicesPage() {
     setSelectedInvoice(invoice);
     setInvoiceDialogOpen(true);
     setFullInvoice(invoice);
-    
+
+    // Try to fetch full invoice details (optional - won't break if fails)
     try {
-      const res = await fetch(`http://localhost:3001/api/invoices/${invoice.id}`, {
-        credentials: "include"
-      });
+      const res = await fetch(`${API_BASE}/api/client/${clientId}/invoices/${invoice.id}/public`);
       if (res.ok) {
         const data = await res.json();
         setFullInvoice(data);
       }
     } catch (err) {
       console.error("Invoice details error:", err);
+      // Use basic invoice data if detailed fetch fails
     }
   };
 
@@ -379,7 +363,14 @@ export default function ClientInvoicesPage() {
         }}
       >
         <Box sx={{ maxWidth: 1200, mx: "auto", px: { xs: 2, sm: 3, md: 4 }, py: 4 }}>
-          {/* Page Header with Back Button */}
+          {/* Error Alert */}
+          {error && (
+            <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
+
+          {/* Page Header */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <ReceiptIcon sx={{ fontSize: 32, color: primaryBlue }} />
@@ -419,7 +410,7 @@ export default function ClientInvoicesPage() {
 
           {/* Invoices List */}
           <Paper sx={{ borderRadius: 2, boxShadow: 2, overflow: 'hidden' }}>
-            {loadingInvoices ? (
+            {loading ? (
               <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
                 <CircularProgress sx={{ color: primaryBlue }} />
               </Box>
@@ -432,6 +423,13 @@ export default function ClientInvoicesPage() {
                 <Typography variant="body2" sx={{ color: '#666', mb: 3 }}>
                   Your invoices will appear here when created by the admin
                 </Typography>
+                <Button
+                  variant="outlined"
+                  onClick={fetchInvoices}
+                  sx={{ borderRadius: 2, px: 4 }}
+                >
+                  Refresh
+                </Button>
               </Box>
             ) : (
               <TableContainer sx={{ bgcolor: 'white' }}>
@@ -457,7 +455,7 @@ export default function ClientInvoicesPage() {
                   </TableHead>
                   <TableBody>
                     {invoices.map((invoice) => {
-                      const paymentStatus = proofStatusMap[invoice.id] || 'pending';
+                      const paymentStatus = getProofStatus(invoice.id);
                       const isPaid = paymentStatus === 'paid';
                       
                       return (
@@ -497,7 +495,6 @@ export default function ClientInvoicesPage() {
                               label={isPaid ? 'PAID' : 'PENDING'}
                               color={isPaid ? 'success' : 'warning'}
                               size="small"
-                              icon={isPaid ? undefined : undefined}
                               sx={{ fontWeight: 600, fontSize: '0.75rem' }}
                             />
                           </TableCell>
@@ -555,7 +552,7 @@ export default function ClientInvoicesPage() {
           </Paper>
 
           {/* Summary Stats */}
-          {!loadingInvoices && invoices.length > 0 && (
+          {!loading && invoices.length > 0 && (
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 3, mt: 4 }}>
               <Paper sx={{ p: 3, borderRadius: 2, boxShadow: 2, bgcolor: 'white', borderLeft: `4px solid ${primaryBlue}` }}>
                 <Typography variant="body2" sx={{ color: '#666', fontWeight: 600, mb: 1 }}>
@@ -570,7 +567,7 @@ export default function ClientInvoicesPage() {
                   Paid
                 </Typography>
                 <Typography variant="h5" fontWeight={700} sx={{ color: successGreen }}>
-                  {Object.values(proofStatusMap).filter(status => status === 'paid').length}
+                  {proofs.filter(p => p.invoice_id).length}
                 </Typography>
               </Paper>
               <Paper sx={{ p: 3, borderRadius: 2, boxShadow: 2, bgcolor: 'white', borderLeft: `4px solid ${warningOrange}` }}>
@@ -578,7 +575,7 @@ export default function ClientInvoicesPage() {
                   Pending
                 </Typography>
                 <Typography variant="h5" fontWeight={700} sx={{ color: warningOrange }}>
-                  {Object.values(proofStatusMap).filter(status => status === 'pending').length}
+                  {invoices.length - proofs.filter(p => p.invoice_id).length}
                 </Typography>
               </Paper>
             </Box>
