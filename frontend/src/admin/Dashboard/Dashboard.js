@@ -54,7 +54,7 @@ import {
   Cell,
   Tooltip,
   Legend,
-  ResponsiveContainer,LineChart, Line, BarChart, Bar, 
+  ResponsiveContainer,AreaChart, Area, BarChart, Bar, 
   CartesianGrid, XAxis, YAxis, 
 } from "recharts";
 
@@ -259,53 +259,121 @@ function DashboardHome({ clients = [], uploads = [] }) {
   maxWidth: 1400,
   mx: "auto"
 }}>
-  {/* LINE GRAPH - Analytics Overview */}
-  <Paper sx={{ 
-    flex: { xs: 1, lg: 2 },
-    p: 4, 
-    height: 400,
-    borderRadius: 4,
-    backdropFilter: "blur(20px)",
-    background: "rgba(255, 255, 255, 0.95)",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
-    border: "1px solid rgba(255,255,255,0.3)"
-  }}>
-    <Typography variant="h5" fontWeight={800} sx={{ 
-      mb: 3, 
+  
+  {/* PULSE GRAPH - NO PAPER/CARD - FULL WIDTH */}
+<Box sx={{ 
+  mb: 8,
+  width: "100%",
+  height: 420,  // Slightly taller without paper padding
+  mx: "auto",
+  position: "relative",
+  background: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)",  // Subtle dashboard bg
+  borderRadius: 3,
+  p: 3,  // Light padding instead of Paper
+  boxShadow: "0 8px 32px rgba(0,0,0,0.08)",  // Soft shadow
+  border: "1px solid rgba(255,255,255,0.6)",
+  backdropFilter: "blur(10px)"
+}}>
+  {/* Header - Centered */}
+  <Typography 
+    variant="h5" 
+    fontWeight={800} 
+    sx={{ 
+      mb: 4, 
       color: "#1a1a1a",
       textAlign: "center",
       background: "linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)",
       WebkitBackgroundClip: "text",
-      WebkitTextFillColor: "transparent"
-    }}>
-      📈 Analytics Overview
-    </Typography>
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={timelineData}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="month" stroke="#666" fontSize={14} />
-        <YAxis stroke="#666" fontSize={14} />
-        <Tooltip />
-        <Legend />
-        <Line 
-          type="monotone" 
-          dataKey="uploads" 
-          stroke="#1976d2" 
-          strokeWidth={4}
-          dot={{ fill: "#1976d2", strokeWidth: 2 }}
-          name="Proofs Uploaded"
-        />
-        <Line 
-          type="monotone" 
-          dataKey="clients" 
-          stroke="#4caf50" 
-          strokeWidth={4}
-          dot={{ fill: "#4caf50", strokeWidth: 2 }}
-          name="New Clients"
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  </Paper>
+      WebkitTextFillColor: "transparent",
+      position: "relative",
+      zIndex: 2
+    }}
+  >
+    📈 Analytics Overview
+  </Typography>
+
+  {/* PULSE/AREA CHART */}
+  <ResponsiveContainer width="100%" height="90%">
+    <AreaChart data={timelineData}>
+      <defs>
+        {/* Pulse gradient fill */}
+        <linearGradient id="uploadsGradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#1976d2" stopOpacity={0.8}/>
+          <stop offset="50%" stopColor="#42a5f5" stopOpacity={0.4}/>
+          <stop offset="100%" stopColor="#90caf9" stopOpacity={0.1}/>
+        </linearGradient>
+        <linearGradient id="clientsGradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#4caf50" stopOpacity={0.8}/>
+          <stop offset="50%" stopColor="#81c784" stopOpacity={0.4}/>
+          <stop offset="100%" stopColor="#a5d6a7" stopOpacity={0.1}/>
+        </linearGradient>
+      </defs>
+      
+      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.04)" />
+      <XAxis 
+        dataKey="month" 
+        stroke="#666" 
+        fontSize={14} 
+        tickLine={false}
+        axisLine={false}
+      />
+      <YAxis 
+        stroke="#666" 
+        fontSize={14} 
+        tickLine={false}
+        axisLine={false}
+      />
+      <Tooltip 
+        contentStyle={{
+          background: "rgba(255,255,255,0.95)",
+          border: "1px solid rgba(25,118,210,0.2)",
+          borderRadius: 12,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.12)"
+        }}
+      />
+      <Legend 
+        wrapperStyle={{ 
+          paddingTop: 16,
+          background: "rgba(255,255,255,0.9)",
+          borderRadius: 8,
+          padding: 12,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.08)"
+        }}
+      />
+      
+      {/* PULSE LINES WITH FILLED AREAS */}
+      <Area 
+        type="monotone" 
+        dataKey="uploads" 
+        stroke="#1976d2" 
+        strokeWidth={4}
+        fill="url(#uploadsGradient)"
+        name="Proofs Uploaded"
+        activeDot={{ 
+          fill: "#1976d2", 
+          strokeWidth: 3, 
+          r: 6,
+          stroke: "#ffffff"
+        }}
+      />
+      <Area 
+        type="monotone" 
+        dataKey="clients" 
+        stroke="#4caf50" 
+        strokeWidth={4}
+        fill="url(#clientsGradient)"
+        name="New Clients"
+        activeDot={{ 
+          fill: "#4caf50", 
+          strokeWidth: 3, 
+          r: 6,
+          stroke: "#ffffff"
+        }}
+      />
+    </AreaChart>
+  </ResponsiveContainer>
+</Box>
+
 
   {/* THIN BAR GRAPH - KPI Metrics */}
   <Paper sx={{ 

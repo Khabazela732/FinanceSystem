@@ -20,13 +20,12 @@ const InvoicePrintView = ({ invoice }) => {
   const money = (v) =>
     v != null ? Number(v).toFixed(2) : "0.00";
 
-  // Fallbacks for VAT calculations
+  // Use retainer_fee directly from form
+  const retainerFee = invoice.retainer_fee ?? 0;
   const vatRate = invoice.vat_rate ?? 15;
-  const totalExcl =
-    invoice.total_excl ?? invoice.amount / (1 + vatRate / 100);
-  const totalVat =
-    invoice.total_vat ?? invoice.amount - totalExcl;
-  const totalIncl = invoice.total_incl ?? invoice.amount;
+  const totalExcl = retainerFee;
+  const totalVat = retainerFee * (vatRate / 100);
+  const totalIncl = retainerFee * (1 + vatRate / 100);
 
   return (
     <Box
@@ -95,7 +94,6 @@ const InvoicePrintView = ({ invoice }) => {
 
       {/* Bill-to block */}
       <Box sx={{ mb: 3 }}>
-      
         <Typography>{invoice.company}</Typography>
         <Typography>{invoice.street}</Typography>
         <Typography>
@@ -107,7 +105,7 @@ const InvoicePrintView = ({ invoice }) => {
         </Typography>
       </Box>
 
-      {/* Items table */}
+      {/* Items table - uses retainer_fee directly */}
       <Table size="small" sx={{ mb: 3 }}>
         <TableHead>
           <TableRow sx={{ bgcolor: "#f5f5f5" }}>
@@ -126,21 +124,21 @@ const InvoicePrintView = ({ invoice }) => {
             </TableCell>
             <TableCell align="right">1</TableCell>
             <TableCell align="right">
-              R {money(totalExcl)}
+              R {money(retainerFee)}
             </TableCell>
             <TableCell align="right">
-              R {money(totalExcl)}
+              R {money(retainerFee)}
             </TableCell>
           </TableRow>
         </TableBody>
       </Table>
 
-      {/* ✅ TOTALS + BANKING SIDE-BY-SIDE (SQUARE BANK BOX) */}
+      {/* ✅ TOTALS + BANKING SIDE-BY-SIDE */}
       <Box sx={{ display: "flex", gap: 3, mb: 3 }}>
-        {/* LEFT: Banking Details - SQUARE BOX */}
+        {/* LEFT: Banking Details */}
         <Box
           sx={{
-            flex: "0 0 140px", // Fixed width = square
+            flex: "0 0 140px",
             height: "fit-content",
             p: 1.5,
             border: "2px solid #333",
@@ -173,7 +171,7 @@ const InvoicePrintView = ({ invoice }) => {
           </Box>
         </Box>
 
-        {/* RIGHT: Totals - Same height */}
+        {/* RIGHT: Totals */}
         <Box sx={{ flex: 1, minWidth: 260 }}>
           <Box sx={{ display: "flex", justifyContent: "space-between" }}>
             <Typography>Total Discount:</Typography>
@@ -209,9 +207,7 @@ const InvoicePrintView = ({ invoice }) => {
             }}
           >
             <Typography>Total Due:</Typography>
-            <Typography>
-              R {money(invoice.amount_due ?? totalIncl)}
-            </Typography>
+            <Typography>R {money(invoice.amount_due ?? totalIncl)}</Typography>
           </Box>
         </Box>
       </Box>

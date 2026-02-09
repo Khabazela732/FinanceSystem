@@ -231,7 +231,7 @@ const InvoiceForm = () => {
     return Object.keys(errs).length === 0;
   }, [form]);
 
-  // 🔥 PERFECT DRAFT/SENT PAYLOAD - MATCHES BACKEND EXPECTATIONS
+  //PERFECT DRAFT/SENT PAYLOAD - MATCHES BACKEND EXPECTATIONS
   const createPayload = useCallback((status) => ({
     company_name: form.company_name?.trim() || "",
     invoice_number: form.invoice_number?.trim() || "",
@@ -242,7 +242,7 @@ const InvoiceForm = () => {
     amount: parseFloat(form.amount) || 0,
     amount_due: parseFloat(form.amount_due) || 0,
     retainer_fee: parseFloat(form.retainer_fee) || 0,
-    status: status  // 🔥 "draft" or "sent" - PERFECT for DraftInvoices filter
+    status: status  //draft or sent - PERFECT for DraftInvoices filter
   }), [form]);
 
   const submitInvoice = useCallback(async (status) => {
@@ -273,7 +273,7 @@ const InvoiceForm = () => {
       } else {
         response = await axios.post("http://localhost:3001/api/invoices", cleanPayload, {
           withCredentials: true,
-          timeout: 10000
+          timeout: 120000
         });
         setSnackbar({ 
           open: true, 
@@ -300,12 +300,12 @@ const InvoiceForm = () => {
 
   const handleSaveDraft = useCallback((e) => {
     e.preventDefault();
-    submitInvoice("draft");  // 🔥 SENDS status: "draft" → DraftInvoices shows it!
+    submitInvoice("draft");  //SENDS status: "draft" → DraftInvoices shows it!
   }, [submitInvoice]);
 
   const handleCreateAndSend = useCallback((e) => {
     e.preventDefault();
-    submitInvoice("sent");   // 🔥 SENDS status: "sent" → Goes to All Invoices
+    submitInvoice("sent");   //SENDS status: "sent" → Goes to All Invoices
   }, [submitInvoice]);
 
   const clientsCount = useMemo(() => clients.length, [clients]);
@@ -641,3 +641,4 @@ const InvoiceForm = () => {
 };
 
 export default InvoiceForm;
+

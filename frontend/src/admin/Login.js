@@ -190,66 +190,55 @@ function Login() {
               )}
 
               <TextField
-                fullWidth
-                margin="normal"
-                required
-                id="email"
-                label="Email Address"
-                name="email"
-                autoComplete="username"
-                autoFocus
-                placeholder="admin@example.com"
-                value={form.email}
-                onChange={handleChange}
-                disabled={loading}
-                sx={{ 
-                  mb: 2, 
-                  "& .MuiOutlinedInput-root": {
-                    fontWeight: 500,
-                    borderRadius: 3,
-                    backdropFilter: "blur(10px)",
-                    background: "rgba(255, 255, 255, 0.8)",
-                    "& fieldset": { borderColor: "rgba(224, 224, 224, 0.7)" },
-                    "&:hover fieldset": { borderColor: "#1976d2" },
-                    "&.Mui-focused fieldset": { 
-                      borderColor: "#1976d2", 
-                      borderWidth: 2,
-                      background: "rgba(255, 255, 255, 0.95)"
-                    }
-                  }
-                }}
-              />
+  fullWidth
+  margin="normal"
+  required
+  id="email"
+  label="Email Address"
+  name="email"
+  autoComplete="username"
+  autoFocus
+  placeholder="admin@example.com"
+  value={form.email}
+  onChange={handleChange}
+  disabled={loading}
+  sx={{ 
+    mb: 2, 
+    "& .MuiOutlinedInput-root": {
+      fontWeight: 500,
+      borderRadius: 3,
+      "& fieldset": { borderColor: "#e0e0e0" },
+      "&:hover fieldset": { borderColor: "#1976d2" },
+      "&.Mui-focused fieldset": { borderColor: "#1976d2", borderWidth: 2 }
+    }
+  }}
+/>
 
-              <TextField
-                fullWidth
-                margin="normal"
-                required
-                name="password"
-                label="Password"
-                type="password"
-                id="password"
-                autoComplete="current-password"
-                placeholder="Enter your password"
-                value={form.password}
-                onChange={handleChange}
-                disabled={loading}
-                sx={{ 
-                  mb: 3,
-                  "& .MuiOutlinedInput-root": {
-                    fontWeight: 500,
-                    borderRadius: 3,
-                    backdropFilter: "blur(10px)",
-                    background: "rgba(255, 255, 255, 0.8)",
-                    "& fieldset": { borderColor: "rgba(224, 224, 224, 0.7)" },
-                    "&:hover fieldset": { borderColor: "#1976d2" },
-                    "&.Mui-focused fieldset": { 
-                      borderColor: "#1976d2", 
-                      borderWidth: 2,
-                      background: "rgba(255, 255, 255, 0.95)"
-                    }
-                  }
-                }}
-              />
+<TextField
+  fullWidth
+  margin="normal"
+  required
+  name="password"
+  label="Password"
+  type="password"
+  id="password"
+  autoComplete="current-password"
+  placeholder="Enter your password"
+  value={form.password}
+  onChange={handleChange}
+  disabled={loading}
+  sx={{ 
+    mb: 3,
+    "& .MuiOutlinedInput-root": {
+      fontWeight: 500,
+      borderRadius: 3,
+      "& fieldset": { borderColor: "#e0e0e0" },
+      "&:hover fieldset": { borderColor: "#1976d2" },
+      "&.Mui-focused fieldset": { borderColor: "#1976d2", borderWidth: 2 }
+    }
+  }}
+/>
+
 
               <Button
                 type="submit"

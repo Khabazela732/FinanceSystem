@@ -2,48 +2,28 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Box,
-  Typography,
-  Paper,
+  Box,Typography,Paper,
   CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  IconButton,
-  Button,
-  AppBar,
-  Toolbar,
+  Dialog,DialogTitle,
+  DialogContent,IconButton,Button,AppBar,Toolbar,
   Backdrop,
-  Chip,
-  Divider,
-  Alert,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Menu,
-  MenuItem
+  Chip,Divider,Alert,Table,
+  TableBody,TableCell,
+  TableContainer,TableHead,
+  TableRow,Menu,MenuItem
 } from "@mui/material";
 import {
-  Close as CloseIcon,
-  Menu as MenuIcon,
-  ArrowBack as ArrowBackIcon,
-  Download as DownloadIcon,
-  Print as PrintIcon,
-  MoreVert as MoreVertIcon,
-  Receipt as ReceiptIcon,
-  Home as HomeIcon,
-  Logout as LogoutIcon,
-  Dashboard as DashboardIcon,
-  Info as InfoIcon
+  Close as CloseIcon,Menu as MenuIcon,
+  ArrowBack as ArrowBackIcon,Download as DownloadIcon,
+  Print as PrintIcon,MoreVert as MoreVertIcon,
+  Receipt as ReceiptIcon,Home as HomeIcon,Logout as LogoutIcon,
+  Dashboard as DashboardIcon,Info as InfoIcon
 } from "@mui/icons-material";
 import InvoicePrintView from "../../admin/Dashboard/Invoices/InvoicePrintView";
 
 const API_BASE = "http://localhost:3001";
 
-// ✅ LIGHT BLUE THEME COLORS - Matching Admin Dashboard
+//LIGHT BLUE THEME COLORS - Matching Admin Dashboard
 const sidebarBg = "#3166AE";
 const sidebarText = "#ffffff";
 const hoverBg = "rgba(255, 255, 255, 0.1)";

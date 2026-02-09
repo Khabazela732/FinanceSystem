@@ -40,6 +40,7 @@ import ClientInvoicesPage from './client/Dashboard/ClientInvoicesPage';
 import ClientPaymentPage from './client/Dashboard/ClientPaymentPage';
 import MonthlyReports from './admin/Dashboard/MonthlyReports';
 
+
 function EntranceScreen() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -452,6 +453,7 @@ export default function App() {
       <Route path="/client/invoices/:id" element={<ClientInvoicesPage />} />
       <Route path="/client/payments/:id" element={<ClientPaymentPage />} />
        <Route path="reports/monthly" element={<MonthlyReports />} />
+       
     </Routes>
   );
 }

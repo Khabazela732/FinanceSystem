@@ -17,12 +17,12 @@ import { useNavigate, Link } from "react-router-dom";
 function SignUp() {
   const navigate = useNavigate();
 
-  // ORIGINAL STATE (UNCHANGED)
+  // ✅ FIXED: Field names match backend exactly
   const [form, setForm] = useState({
     username: "",
-    fullname: "",
-    lastname: "",
-    company: "",
+    full_name: "",      // ✅ Changed from "fullname"
+    last_name: "",      // ✅ Changed from "lastname" 
+    company_name: "",   // ✅ Changed from "company"
     email: "",
     password: "",
     confirmPassword: "",
@@ -31,7 +31,6 @@ function SignUp() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // ORIGINAL HANDLERS (UNCHANGED)
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     setError("");
@@ -45,38 +44,34 @@ function SignUp() {
       return;
     }
 
-    if (
-      !form.username ||
-      !form.fullname ||
-      !form.lastname ||
-      !form.company ||
-      !form.email ||
-      !form.password
-    ) {
-      setError("All fields are required");
+    // ✅ FIXED: Only validate backend-required fields
+    if (!form.username || !form.full_name || !form.email || !form.password) {
+      setError("Username, full name, email, and password are required");
       return;
     }
 
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:3001/signup", {
+      // ✅ FIXED: Send EXACT field names backend expects
+      const response = await fetch("http://localhost:3001/api/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: form.username,
-          fullname: form.fullname,
-          lastname: form.lastname,
-          company: form.company,
+          full_name: form.full_name,    // ✅ Backend expects "full_name"
+          last_name: form.last_name,    // ✅ Backend expects "last_name"
+          company_name: form.company_name, // ✅ Backend expects "company_name"
           email: form.email,
           password: form.password,
         }),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
         navigate("/login");
       } else {
-        const data = await response.json();
         setError(data.message || "Signup failed");
       }
     } catch (err) {
@@ -136,13 +131,77 @@ function SignUp() {
                 </Alert>
               )}
 
-              <TextField fullWidth label="Username" name="username" value={form.username} onChange={handleChange} required sx={fieldStyle} />
-              <TextField fullWidth label="Full Name" name="fullname" value={form.fullname} onChange={handleChange} required sx={fieldStyle} />
-              <TextField fullWidth label="Last Name" name="lastname" value={form.lastname} onChange={handleChange} required sx={fieldStyle} />
-              <TextField fullWidth label="Company Name" name="company" value={form.company} onChange={handleChange} required sx={fieldStyle} />
-              <TextField fullWidth label="Email Address" name="email" type="email" value={form.email} onChange={handleChange} required sx={fieldStyle} />
-              <TextField fullWidth label="Password" name="password" type="password" value={form.password} onChange={handleChange} required sx={fieldStyle} />
-              <TextField fullWidth label="Confirm Password" name="confirmPassword" type="password" value={form.confirmPassword} onChange={handleChange} required sx={{ ...fieldStyle, mb: 3 }} />
+              {/* ✅ FIXED: Field names match backend */}
+              <TextField 
+                fullWidth 
+                label="Username" 
+                name="username" 
+                value={form.username} 
+                onChange={handleChange} 
+                required 
+                sx={fieldStyle} 
+              />
+              
+              <TextField 
+                fullWidth 
+                label="Full Name" 
+                name="full_name"      // ✅ CHANGED: was "fullname"
+                value={form.full_name} 
+                onChange={handleChange} 
+                required 
+                sx={fieldStyle} 
+              />
+              
+              <TextField 
+                fullWidth 
+                label="Last Name" 
+                name="last_name"      // ✅ CHANGED: was "lastname"
+                value={form.last_name} 
+                onChange={handleChange} 
+                sx={fieldStyle} 
+              />
+              
+              <TextField 
+                fullWidth 
+                label="Company Name" 
+                name="company_name"   // ✅ CHANGED: was "company"
+                value={form.company_name} 
+                onChange={handleChange} 
+                sx={fieldStyle} 
+              />
+              
+              <TextField 
+                fullWidth 
+                label="Email Address" 
+                name="email" 
+                type="email" 
+                value={form.email} 
+                onChange={handleChange} 
+                required 
+                sx={fieldStyle} 
+              />
+              
+              <TextField 
+                fullWidth 
+                label="Password" 
+                name="password" 
+                type="password" 
+                value={form.password} 
+                onChange={handleChange} 
+                required 
+                sx={fieldStyle} 
+              />
+              
+              <TextField 
+                fullWidth 
+                label="Confirm Password" 
+                name="confirmPassword" 
+                type="password" 
+                value={form.confirmPassword} 
+                onChange={handleChange} 
+                required 
+                sx={{ ...fieldStyle, mb: 3 }} 
+              />
 
               <Button type="submit" fullWidth variant="contained" disabled={loading} sx={buttonStyle}>
                 {loading ? (
@@ -197,7 +256,7 @@ function SignUp() {
   );
 }
 
-/*Shared styles copied from Login */
+/* Shared styles from Login */
 const fieldStyle = {
   mb: 2,
   "& .MuiOutlinedInput-root": {

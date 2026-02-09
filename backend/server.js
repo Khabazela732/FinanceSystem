@@ -40,6 +40,88 @@ function authenticateAdmin(req, res, next) {
   }
 }
 
+//TRACK ACTIVITY ENDPOINT - Add this after your authenticateAdmin middleware
+app.post('/api/track-activity', authenticateAdmin, async (req, res) => {
+  try {
+    const { action, invoiceId, proofId, duration } = req.body;
+    
+    // ✅ FIXED: Use session.userId (your existing auth pattern)
+    const userId = req.session.userId || req.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    console.log(`📋 Tracking activity: ${action} by user ${userId}`);
+
+    await safeQuery(`
+      INSERT INTO activity_logs (
+        user_id, action, invoice_id, proof_id, duration_seconds, created_at
+      ) VALUES (?, ?, ?, ?, ?, NOW())
+    `, [userId, action, invoiceId || null, proofId || null, duration || 0]);
+
+    console.log(`✅ Activity logged: ${action}`);
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('🚨 Track activity error:', error);
+    res.status(500).json({ error: 'Failed to track activity' });
+  }
+});
+
+//Express app (after authenticateAdmin middleware definition)
+app.get('/api/reports/monthly/:year/:month', authenticateAdmin, async (req, res) => {
+  try {
+    const { year, month } = req.params;
+    console.log(`📊 Generating monthly report: ${year}-${month}`);
+
+    // ✅ Date range using created_at column
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01 00:00:00`;
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()} 23:59:59`;
+    
+    console.log(`📅 Date range: ${startDate} to ${endDate}`);
+
+    // ✅ FIXED: Uses created_at + your table structure (host_employers)
+    const activities = await safeQuery(`
+      SELECT 
+        DATE(al.created_at) as activity_date,
+        COALESCE(a.company, 'Admin') as client_company,
+        al.action,
+        COUNT(*) as count,
+        SUM(COALESCE(al.duration_seconds, 0)) as total_time_seconds,
+        MAX(al.invoice_id) as invoice_id
+      FROM activity_logs al
+      LEFT JOIN invoices i ON al.invoice_id = i.id
+      LEFT JOIN host_employers a ON i.client_id = a.id
+      WHERE al.created_at BETWEEN ? AND ?
+      GROUP BY DATE(al.created_at), al.action, a.company
+      ORDER BY DATE(al.created_at) DESC, count DESC
+    `, [startDate, endDate]);
+
+    // ✅ Transform to exact frontend format
+    const reportData = activities.map(row => ({
+      date: row.activity_date,
+      client_company: row.client_company || 'Admin',
+      action: row.action,
+      count: parseInt(row.count),
+      total_time_seconds: parseInt(row.total_time_seconds || 0),
+      invoice_id: row.invoice_id || null
+    }));
+
+    console.log(`📤 Sending ${reportData.length} activity records`);
+    res.json(reportData);
+    
+  } catch (error) {
+    console.error('🚨 Monthly reports error:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate monthly report',
+      details: error.message 
+    });
+  }
+});
+
+
+
 function authenticateClient(req, res, next) {
   try {
     console.log('Auth Debug:', {
@@ -272,76 +354,7 @@ async function generateInvoicePDF(invoice) {
 }
 
 
-//On this backend api, this is not exposed to frontend
-// This is for production stages, not yet working currently
-app.post("/api/signup", async (req, res) => {
-  try {
-    const {
-      username,
-      full_name,
-      last_name,
-      company_name,
-      email,
-      password,
-    } = req.body;
 
-    console.log("Admin register payload:", req.body);
-
-    if (!username || !full_name || !email || !password) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    // Check existing admin
-    db.query(
-      "SELECT id FROM users WHERE email = ? OR username = ?",
-      [email, username],
-      async (err, results) => {
-        if (err) {
-          console.error("SELECT error:", err);
-          return res.status(500).json({ message: "Database error (select)" });
-        }
-
-        if (results.length > 0) {
-          return res
-            .status(409)
-            .json({ message: "Admin already exists" });
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        db.query(
-          `INSERT INTO users
-           (username, full_name, last_name, company_name, email, password)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [
-            username,
-            full_name,
-            last_name || null,
-            company_name || null,
-            email,
-            hashedPassword,
-          ],
-          (err, result) => {
-            if (err) {
-              console.error("INSERT error:", err);
-              return res
-                .status(500)
-                .json({ message: "Database error (insert)" });
-            }
-
-            res.status(201).json({
-              message: "Admin registered successfully",
-              adminId: result.insertId,
-            });
-          }
-        );
-      }
-    );
-  } catch (error) {
-    console.error("REGISTER CRASH:", error);
-    res.status(500).json({ message: "Server crashed" });
-  }
-});
 
 //Cloudinary config
 console.log("  Cloudinary config check:");
@@ -410,42 +423,105 @@ const upload = multer({
 async function sendClientWelcomeEmail(clientEmail, clientUsername, tempPassword, clientId, companyName) {
   try {
     await transporter.sendMail({
-      from: process.env.EMAIL_USER || "mkhizesenzo732@gmail.com",
+      from: process.env.EMAIL_USER || '"Internship Success" <mkhizesenzo732@gmail.com>',
       to: clientEmail,
-      subject: "Welcome to Internship Success Financial-System ClientPortal - Your Account Details",
+      subject: "Welcome to Internship Success Client Portal - Account Details",
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #1976d2;">Welcome to Internship Success Financial Management System!</h2>
-          <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-           <h4>Your Company Has Been Successfully registered, check below,</h4> 
-          <h3>📋 Your Account Details</h3>
-            <p><strong>👤 Username:</strong> ${clientUsername}</p>
-            <p><strong>📧 Email:</strong> ${clientEmail}</p>
-            <p><strong>🔑 Temporary Password:</strong> 
-               <span style="color: #d15555; font-size: 1.1em; font-weight: bold;">${tempPassword}</span>
-            </p>
-            <p style="color: #d65b5b; font-weight: bold;">
-              Please log in and change this password immediately!
-            </p>
-          </div>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 40px 20px; font-family: Arial, Helvetica, sans-serif; background-color: #ffffff; color: #000000; line-height: 1.6; font-size: 16px;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff; padding: 40px; border: 1px solid #dddddd;">
+    
+    <h1 style="color: #000000; font-size: 28px; margin-bottom: 10px;">Welcome to Internship Success</h1>
+    <p style="color: #333333; font-size: 18px; margin-bottom: 30px;">Your company has been successfully registered with our Client Portal.</p>
 
-          <div style="background: #fff3cd; padding: 15px; border-radius: 6px; margin: 20px 0;">
-            <p><strong>📱 Client Portal:</strong> <a href="${CLIENT_PORTAL_URL}">${CLIENT_PORTAL_URL}</a></p>
-            <p><strong>🏢 Company:</strong> ${companyName}</p>
-          </div>
+    <h2 style="color: #000000; font-size: 20px; margin: 30px 0 20px 0;">Account Details</h2>
+    
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+      <tr>
+        <td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Username:</td>
+        <td style="padding: 12px 0; color: #000000; font-family: 'Courier New', monospace;">${clientUsername}</td>
+      </tr>
+      <tr>
+        <td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Email:</td>
+        <td style="padding: 12px 0; color: #000000;">${clientEmail}</td>
+      </tr>
+      <tr style="background-color: #fff5f5;">
+        <td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Temporary Password:</td>
+        <td style="padding: 12px 0; color: #d63333; font-weight: bold; font-family: 'Courier New', monospace; font-size: 16px;">${tempPassword}</td>
+      </tr>
+    </table>
 
-          <hr style="margin: 30px 0;">
-          <p style="color: #999; font-size: 12px;">
-            Regards,<br>
-            Internship Success
-          </p>
-        </div>`});
-    console.log(`Welcome email sent to ${clientEmail}`);
+    <p style="color: #d63333; font-weight: bold; margin-bottom: 30px; font-size: 15px;">
+      Please login immediately and change your temporary password for security.
+    </p>
+
+    <h2 style="color: #000000; font-size: 20px; margin: 30px 0 20px 0;">Quick Access</h2>
+    
+    <p style="margin-bottom: 20px;">
+      <strong>Company:</strong> ${companyName}<br>
+      <strong>Client ID:</strong> #${clientId}
+    </p>
+
+    <p style="margin-bottom: 30px;">
+      <a href="${CLIENT_PORTAL_URL}" 
+         style="background-color: #0066cc; color: #ffffff; padding: 15px 30px; text-decoration: none; 
+                font-weight: bold; border-radius: 5px; display: inline-block; font-size: 16px;">
+        Login to Client Portal
+      </a>
+    </p>
+
+    <hr style="border: none; border-top: 1px solid #dddddd; margin: 40px 0;">
+
+    <h3 style="color: #000000; font-size: 18px; margin-bottom: 15px;">Next Steps:</h3>
+    <ul style="color: #333333; margin-bottom: 40px;">
+      <li>Login using the credentials above</li>
+      <li>Change your temporary password immediately</li>
+      <li>Verify your company information</li>
+      <li>Access and manage your invoices</li>
+    </ul>
+
+    <hr style="border: none; border-top: 1px solid #dddddd; margin: 40px 0;">
+
+    <!-- Footer -->
+    <table style="width: 100%; font-size: 14px;">
+      <tr>
+        <td style="color: #666666; padding-bottom: 20px;">
+          <strong>Internship Success</strong><br>
+          1st Floor, Shell House<br>
+          Ferreira Street, Mbombela<br>
+          South Africa, 1200
+        </td>
+        <td style="text-align: right; color: #666666; padding-bottom: 20px;">
+          Email: <a href="mailto:mkhizesenzo732@gmail.com" style="color: #0066cc;">mkhizesenzo732@gmail.com</a><br>
+          Tel: +27 11 123 4567
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="text-align: center; color: #999999; font-size: 12px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+          © 2026 Internship Success. All rights reserved.
+        </td>
+      </tr>
+    </table>
+
+  </div>
+</body>
+</html>
+      `
+    });
+
+    console.log(`✅ Welcome email sent to ${clientEmail}`);
   } catch (error) {
-    console.error("Welcome email FAILED:", error.message);
+    console.error("❌ Welcome email FAILED:", error.message);
     throw error;
   }
 }
+
+
 
 //PERFECTLY ALIGNED WITH ClientForm.js - SENDS WELCOME EMAIL!
 app.post('/api/clients', authenticateAdmin, async (req, res) => {
@@ -595,35 +671,80 @@ app.post('/api/clients/forgot-password', async (req, res) => {
     );
     
     // Sendng OTP email to client for resetting their passwords 
-    await transporter.sendMail({
-      from: `"Internship Success" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: '🔐 Password Reset OTP (Valid 1 hour )',
-      html: `
-        <div style="font-family: Arial; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #0e57a0;">Reset Your Password</h2>
-          <p>Hi <strong>${clientName}</strong>,</p>
-          <p>Use this <strong>6-digit verification code</strong> to reset your password:</p>
-          
-          <div style="background: linear-gradient(135deg, #0e57a0, #115293); 
-                      color: white; font-size: 36px; font-weight: bold; 
-                      text-align: center; padding: 25px; border-radius: 16px; 
-                      letter-spacing: 12px; margin: 30px 0; box-shadow: 0 12px 32px rgba(14,87,160,0.4);">
-            ${otp}
-          </div>
-          
-          <p><strong>This code expires in 1 hour.</strong></p>
-          <p>Enter it at: <a href="http://localhost:3000/clients/reset-password?email=${encodeURIComponent(email)}" 
-            style="background: #0e57a0; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;">
-            Reset Password →
-          </a></p>
-          
-          <hr style="border: none; border-top: 1px solid #eee; margin: 40px 0;">
-          <p style="color: #666; font-size: 14px;">Internship Success Team</p>
-        </div>
-      `
-    });
+await transporter.sendMail({
+  from: `"Internship Success" <${process.env.EMAIL_USER}>`,
+  to: email,
+  subject: 'Password Reset Verification Code',
+  html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 40px 20px; font-family: Arial, Helvetica, sans-serif; background-color: #ffffff; color: #000000; line-height: 1.6; font-size: 16px;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff; padding: 40px; border: 1px solid #dddddd;">
     
+    <h1 style="color: #000000; font-size: 28px; margin-bottom: 10px;">Password Reset Request</h1>
+    <p style="color: #333333; font-size: 18px; margin-bottom: 30px;">Dear <strong>${clientName}</strong>,</p>
+
+    <h2 style="color: #000000; font-size: 20px; margin: 30px 0 20px 0;">Verification Code</h2>
+    
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+      <tr style="background-color: #fff5f5;">
+        <td style="padding: 25px 20px; text-align: center; border: 2px solid #d63333;">
+          <span style="font-family: 'Courier New', monospace; font-size: 32px; font-weight: bold; color: #d63333; letter-spacing: 8px;">${otp}</span>
+        </td>
+      </tr>
+    </table>
+
+    <p style="color: #d63333; font-weight: bold; margin-bottom: 30px; font-size: 15px;">
+      This code expires in 1 hour. Do not share it with anyone.
+    </p>
+
+    <p style="margin-bottom: 20px;">
+      <a href="http://localhost:3000/clients/reset-password?email=${encodeURIComponent(email)}" 
+         style="background-color: #0066cc; color: #ffffff; padding: 15px 30px; text-decoration: none; 
+                font-weight: bold; border-radius: 5px; display: inline-block; font-size: 16px;">
+        Complete Password Reset
+      </a>
+    </p>
+
+    <hr style="border: none; border-top: 1px solid #dddddd; margin: 40px 0;">
+
+    <h3 style="color: #000000; font-size: 18px; margin-bottom: 15px;">Did not request this reset?</h3>
+    <p style="color: #333333; margin-bottom: 40px;">
+      If you did not initiate this password reset, please ignore this email.
+    </p>
+
+    <hr style="border: none; border-top: 1px solid #dddddd; margin: 40px 0;">
+
+    <!-- Footer -->
+    <table style="width: 100%; font-size: 14px;">
+      <tr>
+        <td style="color: #666666; padding-bottom: 20px;">
+          <strong>Internship Success</strong><br>
+          1st Floor, Shell House<br>
+          Ferreira Street, Mbombela<br>
+          South Africa, 1200
+        </td>
+        <td style="text-align: right; color: #666666; padding-bottom: 20px;">
+          Email: <a href="mailto:mkhizesenzo732@gmail.com" style="color: #0066cc;">mkhizesenzo732@gmail.com</a><br>
+          Tel: +27 11 123 4567
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="text-align: center; color: #999999; font-size: 12px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+          © 2026 Internship Success. All rights reserved. | This is an automated message.
+        </td>
+      </tr>
+    </table>
+
+  </div>
+</body>
+</html>
+  `
+});    
     res.json({ success: true, message: 'OTP sent to your email!' });
   } catch (error) {
     console.error('Forgot password error:', error);
@@ -894,7 +1015,7 @@ app.post('/api/proofs/upload', upload.single('proofFile'), async (req, res) => {
     });
     
   } catch (error) {
-    console.error("🚨 Upload error:", error.message);
+    console.error("Upload error:", error.message);
     if (req.file) {
       fs.unlink(req.file.path, () => {});
     }
@@ -902,11 +1023,11 @@ app.post('/api/proofs/upload', upload.single('proofFile'), async (req, res) => {
   }
 });
 
-//DRAFT vs SENT SENDS EMAILS CORRECTLY!
-// ENTERPRISE INVOICE CREATION & ISSUING ENDPOINT
+//INVOICE CREATION & ISSUING ENDPOINT
+
 app.post("/api/invoices", authenticateAdmin, async (req, res) => {
   try {
-    console.log(" Invoice request received:", req.body);
+    console.log("📋 Invoice creation request:", req.body);
 
     const {
       company_name,
@@ -917,16 +1038,13 @@ app.post("/api/invoices", authenticateAdmin, async (req, res) => {
       due_date,
       amount,
       amount_due,
-      status // waiting_for_payment | partially_paid | paid
+      status
     } = req.body;
 
-    //VALIDATE STATUS - Match StatusChip exactly
+    // ✅ VALIDATE INPUTS
     const allowedStatuses = ["waiting_for_payment", "partially_paid", "paid"];
     const finalStatus = allowedStatuses.includes(status) ? status : "waiting_for_payment";
 
-    // -----------------------------
-    // VALIDATION (unchanged)
-    // -----------------------------
     if (!company_name?.trim()) return res.status(400).json({ message: "Company name required" });
     if (!invoice_number?.trim()) return res.status(400).json({ message: "Invoice number required" });
     if (!client_id || isNaN(client_id)) return res.status(400).json({ message: "Valid client ID required" });
@@ -934,24 +1052,24 @@ app.post("/api/invoices", authenticateAdmin, async (req, res) => {
     if (!due_date) return res.status(400).json({ message: "Due date required" });
     if (!amount || Number(amount) <= 0) return res.status(400).json({ message: "Valid invoice amount required" });
 
-    // Check duplicate
+    // ✅ CHECK DUPLICATES
     const duplicate = await safeQuery("SELECT id FROM invoices WHERE invoice_number = ?", [invoice_number.trim()]);
     if (duplicate.length > 0) return res.status(409).json({ message: "Invoice number already exists" });
 
-    // Verify client
-    const client = await safeQuery("SELECT id, company, email, fullname FROM host_employers WHERE id = ?", [client_id]);
+    // ✅ VERIFY CLIENT EXISTS
+    const client = await safeQuery(
+      "SELECT id, company, email, fullname FROM host_employers WHERE id = ?", 
+      [client_id]
+    );
     if (!client.length) return res.status(404).json({ message: "Client not found" });
 
     const clientEmail = client[0].email;
     const clientCompany = client[0].company;
-    const clientName = client[0].fullname;
+    console.log("✅ Client verified:", { clientEmail, clientCompany });
 
-    // Set issued_at for non-waiting
-    const issuedAt = finalStatus !== "waiting_for_payment" ? new Date() : null;
-
-    // -----------------------------
-    // INSERT INVOICE
-    // -----------------------------
+    // ✅ CREATE INVOICE
+    const issuedAt = finalStatus !== "waiting_for_payment" ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null;
+    
     const result = await safeQuery(
       `INSERT INTO invoices (
         client_id, company_name, invoice_number, customer_reference,
@@ -972,29 +1090,226 @@ app.post("/api/invoices", authenticateAdmin, async (req, res) => {
     );
 
     const invoiceId = result.insertId;
+    console.log("✅ Invoice created:", invoiceId, invoice_number);
 
-    // Activity log
+    // ✅ FAST IMMEDIATE RESPONSE (frontend happy in <1s)
+    res.json({
+      success: true,
+      message: `Invoice #${invoice_number.trim()} created successfully`,
+      invoiceId,
+      status: finalStatus,
+      clientEmail,
+      redirect: "/admin/invoices"
+    });
+
+    // 👇 FIRE-AND-FORGET BACKGROUND TASK (non-blocking)
+    setImmediate(async () => {
+      try {
+        console.log("🔄 Background: Starting PDF + email for", invoice_number);
+
+        // BUILD INVOICE DATA FOR PDF
+        const invoiceData = {
+          id: invoiceId,
+          invoice_number: invoice_number.trim(),
+          company_name: company_name.trim(),
+          customer_reference: customer_reference?.trim() || 'General Services',
+          client_id: client_id,
+          invoice_date: invoice_date,
+          due_date: due_date,
+          amount: Number(amount),
+          amount_due: Number(amount_due || amount),
+          status: finalStatus,
+          company: clientCompany
+        };
+
+        // GENERATE PDF
+        let pdfBuffer = null;
+        let pdfGenerated = false;
+        try {
+          pdfBuffer = await generateInvoicePDF(invoiceData);
+          pdfGenerated = true;
+          console.log("✅ Background PDF generated:", pdfBuffer.length, "bytes");
+        } catch (pdfError) {
+          console.error("❌ Background PDF failed:", pdfError.message);
+        }
+
+        // SEND CLIENT EMAIL WITH PDF ATTACHMENT
+        console.log("📧 Background: Sending email to:", clientEmail);
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER || '"Internship Success" <mkhizesenzo732@gmail.com>',
+          to: clientEmail,
+          subject: `Invoice ${invoice_number.trim()} - Payment Required`,
+          attachments: pdfBuffer ? [{
+            filename: `Invoice_${invoice_number.trim()}.pdf`,
+            content: pdfBuffer,
+            contentType: 'application/pdf'
+          }] : [],
+          html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 40px 20px; font-family: Arial, Helvetica, sans-serif; background-color: #ffffff; color: #000000; line-height: 1.6; font-size: 16px;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff; padding: 40px; border: 1px solid #dddddd;">
+    <h1 style="color: #000000; font-size: 28px; margin-bottom: 10px;">New Invoice Issued</h1>
+    <p style="color: #333333; font-size: 18px; margin-bottom: 30px;">Dear ${clientCompany} Team,</p>
+    
+    <h2 style="color: #000000; font-size: 20px; margin: 30px 0 20px 0;">Invoice Summary</h2>
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+      <tr><td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Invoice Number:</td><td style="padding: 12px 0; color: #000000; font-family: 'Courier New', monospace;">${invoice_number.trim()}</td></tr>
+      <tr><td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Issue Date:</td><td style="padding: 12px 0; color: #000000;">${new Date(invoice_date).toLocaleDateString('en-ZA')}</td></tr>
+      <tr><td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Due Date:</td><td style="padding: 12px 0; color: #000000;">${new Date(due_date).toLocaleDateString('en-ZA')}</td></tr>
+    </table>
+    
+    ${pdfGenerated ? 
+      '<p style="margin-bottom: 30px;"><strong>📎 Invoice Attached:</strong> Please download the attached PDF for complete invoice details and payment instructions.</p>' : 
+      '<p style="margin-bottom: 30px; color: #d63333;"></p>'
+    }
+    
+    <div style="background-color: #f8f9fa; border: 1px solid #dddddd; padding: 20px; margin-bottom: 30px; border-radius: 5px;">
+      <p style="color: #333333; font-weight: bold; margin: 0 0 15px 0; font-size: 15px;">Payment Instructions</p>
+      <p style="margin: 0; color: #333333;">Please make payment using the bank details provided in the attached invoice PDF. Use invoice number <strong>${invoice_number.trim()}</strong> as your payment reference.</p>
+    </div>
+    
+    <p style="margin-bottom: 30px;">
+      <a href="${CLIENT_PORTAL_URL}" style="background-color: #0066cc; color: #ffffff; padding: 15px 30px; text-decoration: none; font-weight: bold; border-radius: 5px; display: inline-block; font-size: 16px;">Login to Client Portal</a>
+    </p>
+    
+    <p style="margin-bottom: 20px;">Upload your payment proof directly through the Client Portal for immediate processing.</p>
+    
+    <hr style="border: none; border-top: 1px solid #dddddd; margin: 40px 0;">
+    <h3 style="color: #000000; font-size: 18px; margin-bottom: 15px;">Next Steps:</h3>
+    <ul style="color: #333333; margin-bottom: 40px;">
+      <li>Download and review the attached invoice PDF</li>
+      <li>Make payment using bank details in the PDF</li>
+      <li>Login to Client Portal to upload payment proof</li>
+      <li>Track invoice status in real-time</li>
+    </ul>
+    
+    <hr style="border: none; border-top: 1px solid #dddddd; margin: 40px 0;">
+    <table style="width: 100%; font-size: 14px;">
+      <tr>
+        <td style="color: #666666; padding-bottom: 20px;">
+          <strong>Internship Success</strong><br>1st Floor, Shell House<br>Ferreira Street, Mbombela<br>South Africa, 1200
+        </td>
+        <td style="text-align: right; color: #666666; padding-bottom: 20px;">
+          Email: <a href="mailto:mkhizesenzo732@gmail.com" style="color: #0066cc;">mkhizesenzo732@gmail.com</a><br>Tel: +27 11 123 4567
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="text-align: center; color: #999999; font-size: 12px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+          © 2026 Internship Success. All rights reserved. | This is an automated message.
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>`
+        });
+
+        console.log("✅ Background email SENT SUCCESSFULLY to:", clientEmail);
+
+      } catch (bgError) {
+        console.error("❌ Background email FAILED:", bgError.message);
+        
+        // Notify admin of failure
+        await safeQuery(
+          `INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())`,
+          [`❌ Email failed for invoice #${invoice_number.trim()} to ${clientEmail}`, ADMIN_EMAIL]
+        );
+      }
+    });
+
+    // 👇 THESE RUN AFTER res.json() - Frontend already redirected
     await safeQuery(
       'INSERT INTO activity_logs (user_type, user_id, client_company, action, invoice_id) VALUES (?, ?, ?, ?, ?)',
       ['admin', req.session.userId, clientCompany, 'invoice_created', invoiceId]
     );
 
-    // Admin notification
     await safeQuery(
       `INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())`,
-      [`📄 NEW INVOICE ${finalStatus.toUpperCase()}: #${invoice_number} (R${Number(amount).toLocaleString()})`, ADMIN_EMAIL]
+      [`📄 NEW INVOICE ${finalStatus.toUpperCase()}: #${invoice_number.trim()} (R${Number(amount).toLocaleString()})`, ADMIN_EMAIL]
     );
 
-    res.json({
-      success: true,
+  } catch (error) {
+    console.error("🚨 INVOICE CREATION ERROR:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to create invoice",
+      error: error.message 
+    });
+  }
+});
+
+
+//Update invoice status (PATCH /api/invoices/:id/status)
+app.patch("/api/invoices/:id/status", authenticateAdmin, async (req, res) => {
+  try {
+    const invoiceId = parseInt(req.params.id);
+    const { status } = req.body; // expecting: "waiting_for_payment", "partially_paid", "paid"
+
+    console.log(`Updating invoice ${invoiceId} status to: ${status}`);
+
+    //Validate status
+    const allowedStatuses = ["waiting_for_payment", "partially_paid", "paid"];
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ 
+        message: `Invalid status. Must be one of: ${allowedStatuses.join(", ")}` 
+      });
+    }
+
+    //Check if invoice exists
+    const invoice = await safeQuery(
+      "SELECT id, client_id, status FROM invoices WHERE id = ?",
+      [invoiceId]
+    );
+
+    if (invoice.length === 0) {
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    //Update status
+    const result = await safeQuery(
+      "UPDATE invoices SET status = ?, updated_at = NOW() WHERE id = ?",
+      [status, invoiceId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(400).json({ message: "Failed to update status" });
+    }
+
+    console.log(`Invoice ${invoiceId} status updated to: ${status}`);
+
+    //Notify client if marked as PAID
+    if (status === "paid") {
+      const client = await safeQuery(
+        "SELECT company, email FROM host_employers WHERE id = ?",
+        [invoice[0].client_id]
+      );
+      
+      if (client.length > 0) {
+        // Send paid notification email
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: client[0].email,
+          subject: `Invoice ${invoiceId} - PAID`,
+          html: `<h2>Thank you! Invoice #${invoiceId} has been successfully PAID to Internship Success</h2>`
+        });
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: "Status updated successfully",
       invoiceId,
-      status: finalStatus,
-      message: `Invoice created as ${finalStatus.replace('_', ' ')}`
+      newStatus: status 
     });
 
-  } catch (err) {
-    console.error("🚨 Invoice creation error:", err);
-    res.status(500).json({ message: "Server error while creating invoice" });
+  } catch (error) {
+    console.error("Update invoice status error:", error);
+    res.status(500).json({ message: "Server error updating status" });
   }
 });
 
@@ -1091,10 +1406,9 @@ app.get("/api/invoices", async (req, res) => {
   }
 });
 
-
 app.get('/api/client/invoices', async (req, res) => {
   try {
-    // INLINE CLIENT-ONLY AUTH (independent from admin)
+    // INLINE CLIENT-ONLY AUTH (unchanged)
     if (!req.session?.clientId || req.session.userId) {
       return res.status(401).json({ 
         success: false, 
@@ -1102,28 +1416,53 @@ app.get('/api/client/invoices', async (req, res) => {
       });
     }
 
-    const clientId = req.session.clientId;  // Direct from session (not req.user.id)
+    const clientId = req.session.clientId;
     
-    console.log(`Client ${clientId} fetching THEIR invoices only`);
-    
+    console.log(`Client ${clientId} fetching THEIR invoices + proofs`);
+
+    // ✅ ENHANCED QUERY with payment_proofs JOIN
     const invoices = await safeQuery(`
       SELECT 
-        id, invoice_number, company_name, invoice_date, due_date,
-        amount, amount_due, status, created_at, issued_at, client_id
-      FROM invoices 
-      WHERE client_id = ?
-        AND status IN ('sent', 'SENT', 'ISSUED', 'PAID', 'OVERDUE', 'draft')
-      ORDER BY created_at DESC
+        i.id, i.invoice_number, i.company_name, i.customer_reference,
+        i.invoice_date, i.due_date, i.amount, i.amount_due, i.status,
+        i.created_at, i.issued_at, i.client_id,
+        p.filename as proof_filename, 
+        p.uploaded_at as proof_date,
+        p.status as proof_status
+      FROM invoices i
+      LEFT JOIN payment_proofs p ON i.id = p.invoice_id
+      WHERE i.client_id = ?
+      ORDER BY i.created_at DESC
     `, [clientId]);
-    
+
     console.log(`Client ${clientId} has ${invoices.length} invoices`);
-    res.json(invoices);
+    
+    res.json({
+      success: true,
+      invoices: invoices.map(inv => ({
+        id: inv.id,
+        invoice_number: inv.invoice_number,
+        company_name: inv.company_name,
+        customer_reference: inv.customer_reference || 'General Services',
+        invoice_date: inv.invoice_date,
+        due_date: inv.due_date,
+        amount: parseFloat(inv.amount),
+        amount_due: parseFloat(inv.amount_due),
+        status: inv.status,
+        created_at: inv.created_at,
+        issued_at: inv.issued_at,
+        proof_filename: inv.proof_filename,
+        proof_date: inv.proof_date,
+        proof_status: inv.proof_status || null
+      }))
+    });
 
   } catch (error) {
     console.error('Client invoices error:', error);
     res.status(500).json({ success: false, message: 'Failed to load invoices' });
   }
 });
+
 
 
 //Delete and Invoice API from list  as well as in Database
@@ -1212,31 +1551,114 @@ app.post('/api/reminders/payment/:invoiceId', authenticateAdmin, async (req, res
     const isOverdue = daysOverdue > 0;
     
     // Send professional reminder email
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER || "mkhizesenzo732@gmail.com",
-      to: inv.email,
-      subject: `${isOverdue ? 'URGENT' : 'Friendly'} Payment Reminder: Invoice Number:${inv.invoice_number}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-         <h2 style="color: ${isOverdue ? '#df4949' : '#1976d2'};">${isOverdue ? 'URGENT PAYMENT REMINDER' : 'Payment Reminder'}</h2> 
-         <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-           <h3>📄 Invoice Details</h3>
-           <p><strong>Invoice:</strong> ${inv.invoice_number}</p>
-           <p><strong>Client:</strong> ${inv.company}</p>
-           <p><strong>Date:</strong> ${new Date(inv.invoice_date).toLocaleDateString()}</p>
-           <p><strong>Due Date:</strong> ${new Date(inv.due_date).toLocaleDateString()}${isOverdue ? ` (OVERDUE ${daysOverdue} days)` : ''}</p>
-           <p><strong>Amount Due:</strong> <span style="color: #d32f2f; font-size: 1.3em; font-weight: bold;">R ${parseFloat(inv.amount_due).toLocaleString()}</span></p>
-         </div>
-         <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-           <p>Upload Payment:</p>
-           <p>Login to your <a href="${CLIENT_PORTAL_URL}">Client Portal</a> to upload payment proof.</p>
-         </div>
-         <hr style="margin: 30px 0;">
-         <p>Thank you for your prompt attention.<br>${inv.company_name} Team</p>
-        </div>
-      `
-    });
+await transporter.sendMail({
+  from: process.env.EMAIL_USER || '"Internship Success" <mkhizesenzo732@gmail.com>',
+  to: inv.email,
+  subject: `Payment Reminder: Invoice ${inv.invoice_number} - ${isOverdue ? 'OVERDUE' : 'Due Soon'}`,
+  html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 40px 20px; font-family: Arial, Helvetica, sans-serif; background-color: #ffffff; color: #000000; line-height: 1.6; font-size: 16px;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff; padding: 40px; border: 1px solid #dddddd;">
     
+    <h1 style="color: ${isOverdue ? '#d63333' : '#000000'}; font-size: 28px; margin-bottom: 10px;">
+      ${isOverdue ? 'Payment Overdue Notice' : 'Payment Reminder'}
+    </h1>
+    
+    <p style="color: #333333; font-size: 18px; margin-bottom: 30px;">
+      Dear ${inv.company} Team,
+    </p>
+
+    <p style="margin-bottom: 30px; color: #333333;">
+      This is a friendly reminder regarding your outstanding invoice.
+    </p>
+
+    <h2 style="color: #000000; font-size: 20px; margin: 30px 0 20px 0;">Invoice Summary</h2>
+    
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+      <tr>
+        <td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Invoice Number:</td>
+        <td style="padding: 12px 0; color: #000000; font-family: 'Courier New', monospace;">${inv.invoice_number}</td>
+      </tr>
+      <tr>
+        <td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Issue Date:</td>
+        <td style="padding: 12px 0; color: #000000;">${new Date(inv.invoice_date).toLocaleDateString('en-ZA')}</td>
+      </tr>
+      <tr style="${isOverdue ? 'background-color: #fff5f5; border-left: 4px solid #d63333;' : ''}">
+        <td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Due Date:</td>
+        <td style="padding: 12px 0; color: ${isOverdue ? '#d63333' : '#000000'}; font-weight: bold;">
+          ${new Date(inv.due_date).toLocaleDateString('en-ZA')}
+          ${isOverdue ? ` (Overdue ${daysOverdue} days)` : ''}
+        </td>
+      </tr>
+    </table>
+
+    <div style="background-color: ${isOverdue ? '#fff5f5' : '#f8f9fa'}; border: 1px solid ${isOverdue ? '#d63333' : '#dddddd'}; padding: 20px; margin-bottom: 30px; border-radius: 5px;">
+      <p style="color: ${isOverdue ? '#d63333' : '#333333'}; font-weight: bold; margin: 0 0 15px 0; font-size: 15px;">
+        ${isOverdue ? 'Immediate Action Required' : 'Payment Request'}
+      </p>
+      <p style="margin: 0; color: #333333;">
+        Please settle the outstanding amount at your earliest convenience. 
+        Payment details and instructions are available in your Client Portal.
+      </p>
+    </div>
+
+    <p style="margin-bottom: 30px; text-align: center;">
+      <a href="${CLIENT_PORTAL_URL}" 
+         style="background-color: #0066cc; color: #ffffff; padding: 15px 30px; text-decoration: none; 
+                font-weight: bold; border-radius: 5px; display: inline-block; font-size: 16px;">
+        Login to Client Portal
+      </a>
+    </p>
+
+    <p style="margin-bottom: 20px; color: #333333;">
+      Use the portal to view invoice details, make payments, and upload payment confirmation.
+    </p>
+
+    <hr style="border: none; border-top: 1px solid #dddddd; margin: 40px 0;">
+
+    <h3 style="color: #000000; font-size: 18px; margin-bottom: 15px;">Next Steps:</h3>
+    <ul style="color: #333333; margin-bottom: 40px; padding-left: 20px;">
+      <li>Login to Client Portal to view full invoice details</li>
+      <li>Make payment using the provided banking instructions</li>
+      <li>Upload payment proof through the portal</li>
+      <li>Contact us if you require invoice copy or have questions</li>
+    </ul>
+
+    <hr style="border: none; border-top: 1px solid #dddddd; margin: 40px 0;">
+
+    <!-- Footer -->
+    <table style="width: 100%; font-size: 14px;">
+      <tr>
+        <td style="color: #666666; padding-bottom: 20px;">
+          <strong>Internship Success</strong><br>
+          1st Floor, Shell House<br>
+          Ferreira Street, Mbombela<br>
+          South Africa, 1200
+        </td>
+        <td style="text-align: right; color: #666666; padding-bottom: 20px;">
+          Email: <a href="mailto:mkhizesenzo732@gmail.com" style="color: #0066cc;">mkhizesenzo732@gmail.com</a><br>
+          Tel: +27 11 123 4567
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="text-align: center; color: #999999; font-size: 12px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+          © 2026 Internship Success. All rights reserved.<br>
+          This is an automated payment reminder.
+        </td>
+      </tr>
+    </table>
+
+  </div>
+</body>
+</html>
+  `
+});
+
     // Admin notification
     await safeQuery(
       "INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())",
@@ -1261,7 +1683,7 @@ app.post('/api/reminders/payment/:invoiceId', authenticateAdmin, async (req, res
   }
 });
 
-//CLIENT PROOFS - ADMIN OR OWNER ONLY
+//CLIENT PROOFS - ADMIN
 app.get('/api/clients/:id/proofs', async (req, res) => {
   try {
     // INLINE AUTH - Admin OR matching Client only
@@ -1304,6 +1726,7 @@ app.get('/api/clients/:id/proofs', async (req, res) => {
 });
 
 
+
 // Admin fetching using get method list of POPs
 app.get("/api/payment-proofs", authenticateAdmin, async (req, res) => {
   try {
@@ -1319,11 +1742,10 @@ app.get("/api/payment-proofs", authenticateAdmin, async (req, res) => {
     res.status(500).json({ success: false, error: "Database error" });
   }
 });
-
 // GET PROOFS FOR CLIENT - ALTERNATIVE ENDPOINT (used by ClientDashboard)
 app.get('/api/proofs/client/:clientId', async (req, res) => {
   try {
-    // INLINE AUTH - Set the flags your code expects
+    // INLINE AUTH - Set the flags your code expects (UNCHANGED)
     if (!req.session) {
       return res.status(401).json({ success: false, message: "No session" });
     }
@@ -1332,7 +1754,7 @@ app.get('/api/proofs/client/:clientId', async (req, res) => {
     req.isAdmin = !!req.session.userId && !req.session.clientId;
     req.clientId = req.session.clientId;
 
-    // Block unauthorized access
+    // Block unauthorized access (UNCHANGED)
     if (!req.isClient && !req.isAdmin) {
       return res.status(401).json({ success: false, message: "Login required" });
     }
@@ -1346,35 +1768,74 @@ app.get('/api/proofs/client/:clientId', async (req, res) => {
       requestedClientId: clientId
     });
     
-    //Your exact logic preserved: Allow admins OR client's own proofs
+    //Your exact logic preserved: Allow admins OR client's own proofs (UNCHANGED)
     if (req.isClient && req.clientId !== clientId) {
       return res.status(403).json({ 
         success: false, 
         message: "Access denied - cannot view other client's proofs" 
       });
     }
-    // Admins bypass the check completely 
 
-    const proofs = await safeQuery(`
-      SELECT pp.id, pp.client_id, pp.file_path, pp.public_url, pp.comment, 
-             pp.uploaded_at, pp.file_type
-      FROM payment_proofs pp 
-      WHERE pp.client_id = ? 
-      ORDER BY pp.uploaded_at DESC
+    // ✅ ENHANCED QUERY: INVOICES + PROOFS JOIN
+    const results = await safeQuery(`
+      SELECT 
+        i.id as invoice_id, i.invoice_number, i.company_name, i.customer_reference,
+        i.invoice_date, i.due_date, i.amount, i.amount_due, i.status as invoice_status,
+        i.created_at, i.issued_at,
+        pp.id as proof_id, pp.file_path, pp.public_url, pp.comment as proof_comment, 
+        pp.uploaded_at as proof_date, pp.file_type, pp.status as proof_status
+      FROM invoices i
+      LEFT JOIN payment_proofs pp ON i.id = pp.invoice_id
+      WHERE i.client_id = ?
+      ORDER BY i.created_at DESC, pp.uploaded_at DESC
     `, [clientId]);
     
-    console.log(`Proofs fetched for client ${clientId}: ${proofs.length} found`);
-    res.json(proofs || []);
+    // ✅ GROUP BY INVOICE (handle multiple proofs per invoice)
+    const invoicesMap = {};
+    results.forEach(row => {
+      if (!invoicesMap[row.invoice_id]) {
+        invoicesMap[row.invoice_id] = {
+          id: row.invoice_id,
+          invoice_number: row.invoice_number,
+          company_name: row.company_name,
+          customer_reference: row.customer_reference || 'General Services',
+          invoice_date: row.invoice_date,
+          due_date: row.due_date,
+          amount: parseFloat(row.amount),
+          amount_due: parseFloat(row.amount_due),
+          status: row.invoice_status,
+          created_at: row.created_at,
+          issued_at: row.issued_at,
+          proofs: []
+        };
+      }
+      
+      if (row.proof_id) {
+        invoicesMap[row.invoice_id].proofs.push({
+          id: row.proof_id,
+          file_path: row.file_path,
+          public_url: row.public_url,
+          comment: row.proof_comment,
+          uploaded_at: row.proof_date,
+          file_type: row.file_type,
+          status: row.proof_status
+        });
+      }
+    });
+
+    const invoices = Object.values(invoicesMap);
+    
+    console.log(`✅ Client ${clientId} invoices + proofs: ${invoices.length} invoices found`);
+    res.json({
+      success: true,
+      invoices: invoices
+    });
 
   } catch (error) {
     console.error('Client proofs fetch error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch proofs' });
+    res.status(500).json({ success: false, error: 'Failed to fetch invoices and proofs' });
   }
 });
-
-
-// Backend - Add these 2 endpoints
-
 // API 1: Get client notifications (NEW)
 app.get('/api/notifications/client/:clientId', async (req, res) => {
   try {
@@ -1541,6 +2002,85 @@ app.patch('/api/notifications/:notificationId/read', async (req, res) => {
   } catch (error) {
     console.error('Mark read error:', error);
     res.status(500).json({ error: 'Failed to update notification' });
+  }
+});
+
+
+// ✅ FIXED - Uses safeQuery() to match your server architecture!
+app.post("/api/signup", async (req, res) => {
+  try {
+    const {
+      username,
+      full_name,
+      last_name,
+      company_name,
+      email,
+      password,
+    } = req.body;
+
+    console.log("Signup payload received:", req.body);
+
+    // ✅ Validate required fields
+    if (!username || !full_name || !email || !password) {
+      return res.status(400).json({ 
+        message: "Username, full name, email, and password are required" 
+      });
+    }
+
+    // ✅ Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Please enter a valid email" });
+    }
+
+    // ✅ Check if user already exists (uses safeQuery!)
+    const existingUsers = await safeQuery(
+      "SELECT id, username, email FROM users WHERE email = ? OR username = ?",
+      [email.toLowerCase().trim(), username.trim()]
+    );
+
+    if (existingUsers.length > 0) {
+      const existingUser = existingUsers[0];
+      if (existingUser.email === email.toLowerCase().trim()) {
+        return res.status(409).json({ message: "Email already registered" });
+      }
+      return res.status(409).json({ message: "Username already taken" });
+    }
+
+    // ✅ Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // ✅ Insert new user (uses safeQuery!)
+    const result = await safeQuery(
+      `INSERT INTO users (username, full_name, last_name, company_name, email, password) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        username.trim(),
+        full_name.trim(),
+        last_name?.trim() || null,
+        company_name?.trim() || null,
+        email.toLowerCase().trim(),
+        hashedPassword,
+      ]
+    );
+
+    console.log(`✅ User created successfully: ID ${result.insertId}`);
+    
+    res.status(201).json({
+      message: "Account created successfully",
+      userId: result.insertId,
+      redirect: "/login"
+    });
+
+  } catch (error) {
+    console.error("Signup API error:", error);
+    
+    // Handle MySQL errors specifically
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ message: "User already exists" });
+    }
+    
+    res.status(500).json({ message: "Failed to create account" });
   }
 });
 
