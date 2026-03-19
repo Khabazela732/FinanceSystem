@@ -1,39 +1,26 @@
-// ClientDashboard.jsx - INTERACTIVE PIE CHART + MONTHLY ANALYTICS (Proofs + Invoices + Interactions)
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Box, Typography, Paper, CircularProgress, Alert, AppBar, Toolbar,
-  IconButton, Backdrop, Button, Divider, Chip, LinearProgress
+  IconButton, Backdrop, Button, Divider, Chip, LinearProgress,
+  TextField,Grid
 } from "@mui/material";
 import { 
-  Menu as MenuIcon, 
-  Close as CloseIcon, 
-  Dashboard as DashboardIcon,
-  Receipt as ReceiptIcon, 
-  UploadFile, 
-  Edit as EditIcon, 
-  Bolt as BoltIcon,
-  Home as HomeIcon, 
-  Logout as LogoutIcon,
-  TrendingUp as TrendingUpIcon,
-  PieChart as PieChartIcon,
-  BarChart as BarChartIcon,
-  Payment as PaymentIcon
+  Menu as MenuIcon, Close as CloseIcon, Dashboard as DashboardIcon, Receipt as ReceiptIcon, 
+  UploadFile, Edit as EditIcon, Bolt as BoltIcon, Home as HomeIcon, Logout as LogoutIcon,
+  TrendingUp as TrendingUpIcon, PieChart as PieChartIcon,
+  BarChart as BarChartIcon, Payment as PaymentIcon, 
+  Person as PersonIcon, Phone as PhoneIcon,
+  Email as EmailIcon, LocationOn as LocationOnIcon, Business as BusinessIcon,
+  BusinessCenter as BusinessCenterIcon,
+  LocationCity as LocationCityIcon,
+  Map as MapIcon,
+  ContactMail as ContactMailIcon
 } from "@mui/icons-material";
 import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  Legend,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  LineChart,
-  Line
+  PieChart,Pie,Cell,
+  ResponsiveContainer,Tooltip,Legend,BarChart,
+  Bar,XAxis,YAxis,CartesianGrid,LineChart,Line
 } from "recharts";
 
 // LIGHT BLUE THEME COLORS - Matching Admin Dashboard
@@ -91,6 +78,11 @@ export default function ClientDashboard() {
   const [proofs, setProofs] = useState([]);
   const [loadingProofs, setLoadingProofs] = useState(true);
   const [invoices, setInvoices] = useState([]);
+  const [showProfile, setShowProfile] = useState(true);
+const [isEditing, setIsEditing] = useState(false);
+const [profileImagePreview, setProfileImagePreview] = useState(null);
+const [formData, setFormData] = useState({});
+
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
@@ -304,6 +296,74 @@ export default function ClientDashboard() {
     }
     return null;
   };
+
+const DetailRowSmall = ({ icon, label, value }) => (
+  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5 }}>
+    <Box sx={{ 
+      minWidth: 28, 
+      height: 28, 
+      borderRadius: 1,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: "1rem",
+      fontWeight: "bold"
+    }}>
+      {icon}
+    </Box>
+    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+      <Typography variant="caption" fontWeight={600} sx={{ color: "#6b7280", display: "block" }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" fontWeight={600} sx={{ color: "#1f2937", mt: 0.25 }}>
+        {value}
+      </Typography>
+    </Box>
+  </Box>
+);
+
+
+const FieldRow = ({ icon, label, value, editing, onChange, type = "text" }) => (
+  <Grid item xs={12}>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 2.5 }}>
+      <Box sx={{ 
+        width: 48, 
+        height: 48, 
+        borderRadius: 2.5,
+        bgcolor: "rgba(30,58,138,0.08)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }}>
+        {icon}
+      </Box>
+      <Box sx={{ flexGrow: 1 }}>
+        <Typography variant="caption" fontWeight={600} sx={{ color: "#64748b", mb: 1, display: "block" }}>
+          {label}
+        </Typography>
+        {editing ? (
+          <TextField
+            fullWidth
+            size="small"
+            type={type}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            sx={{ 
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 2,
+                bgcolor: "white"
+              }
+            }}
+          />
+        ) : (
+          <Typography variant="body1" fontWeight={700} sx={{ color: "#1e293b" }}>
+            {value}
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  </Grid>
+);
 
   const renderOverview = () => (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -803,87 +863,34 @@ export default function ClientDashboard() {
       </AppBar>
 
       {/* SLIDE-IN SIDEBAR */}
-      <Box sx={{ 
-        position: "fixed", 
-        top: 0, 
-        left: sidebarOpen ? 0 : -280, 
-        width: 280, 
-        height: "100vh", 
-        zIndex: 1300, 
-        transition: "left 0.3s ease", 
-        bgcolor: sidebarBg, 
-        color: sidebarText, 
-        boxShadow: sidebarOpen ? "8px 0 24px rgba(0,0,0,0.3)" : "none"
-      }} 
-      onClick={(e) => e.stopPropagation()}>
-        <Box sx={{ p: 3, borderBottom: "1px solid rgba(255,255,255,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <Box>
-            <Typography variant="h6" fontWeight={700} sx={{ mb: 0.25, color: '#ffffff', fontSize: '1rem' }}>Internship Success</Typography>
-            <Typography variant="caption" sx={{ opacity: 0.9, fontSize: '0.8rem' }}>Admin Portal</Typography>
-          </Box>
-          <IconButton onClick={closeSidebar} sx={{ color: sidebarText, "&:hover": { bgcolor: hoverBg } }}>
-            <CloseIcon sx={{ fontSize: 20 }} />
-          </IconButton>
-        </Box>
-        <Box sx={{ flexGrow: 1, p: 2 }}>
-          <Button 
-            fullWidth
-            onClick={() => closeSidebar()} 
-            sx={navButtonStyle(true)}
-          >
-            <DashboardIcon sx={{ fontSize: 18 }} /> 
-            <span>Analytics</span>
-          </Button>
-          <Button 
-            fullWidth
-            onClick={() => { navigate(`/client/invoices/${id}`); closeSidebar(); }} 
-            sx={navButtonStyle(false)}
-          >
-            <ReceiptIcon sx={{ fontSize: 18 }} /> 
-            <span>Invoices</span>
-          </Button>
-          <Button 
-            fullWidth
-            onClick={() => { navigate(`/client/proof-upload/${id}`); closeSidebar(); }} 
-            sx={navButtonStyle(false)}
-          >
-            <UploadFile sx={{ fontSize: 18 }} /> 
-            <span>Upload Proof</span>
-          </Button>
-          <Button 
-            fullWidth
-            onClick={() => { navigate(`/client/payments/${id}`); closeSidebar(); }} 
-            sx={navButtonStyle(false)}
-          >
-            <PaymentIcon sx={{ fontSize: 18 }} /> 
-            <span>Make Payment</span>
-          </Button>
-          <Divider sx={{ borderColor: "rgba(255,255,255,0.2)", my: 1.5 }} />
-          <Button 
-            fullWidth
-            onClick={() => { navigate("/clients/login"); closeSidebar(); }} 
-            variant="contained"
-            sx={{ 
-              bgcolor: "#ffffff", 
-              color: "#3166AE", 
-              fontWeight: 700, 
-              borderRadius: 1.5, 
-              py: 1.2, 
-              fontSize: "0.9rem",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-              transition: 'all 0.3s ease',
-              "&:hover": { 
-                bgcolor: "#f5f5f5", 
-                transform: "translateY(-2px)",
-                boxShadow: "0 6px 16px rgba(0,0,0,0.3)"
-              }
-            }}
-          >
-            <LogoutIcon sx={{ mr: 1, fontSize: 18 }} /> 
-            Sign Out
-          </Button>
-        </Box>
-      </Box>
+<Box sx={{ flexGrow: 1, p: 2 }}>
+  <Button fullWidth onClick={() => closeSidebar()} sx={navButtonStyle(true)}>
+    <DashboardIcon sx={{ fontSize: 18 }} /> <span>Analytics</span>
+  </Button>
+  
+  <Button fullWidth onClick={() => { navigate(`/client/invoices/${id}`); closeSidebar(); }} sx={navButtonStyle(false)}>
+    <ReceiptIcon sx={{ fontSize: 18 }} /> <span>Invoices</span>
+  </Button>
+  
+  <Button fullWidth onClick={() => { navigate(`/client/proof-upload/${id}`); closeSidebar(); }} sx={navButtonStyle(false)}>
+    <UploadFile sx={{ fontSize: 18 }} /> <span>Upload Proof</span>
+  </Button>
+  
+  <Button fullWidth onClick={() => { navigate(`/client/payments/${id}`); closeSidebar(); }} sx={navButtonStyle(false)}>
+    <PaymentIcon sx={{ fontSize: 18 }} /> <span>Make Payment</span>
+  </Button>
+  
+  <Button fullWidth onClick={() => { navigate("/clients/ClientProfilePage"); closeSidebar(); }} sx={navButtonStyle(false)}>
+    <PersonIcon sx={{ fontSize: 18 }} /> <span>My Profile</span>
+  </Button>
+  
+  <Divider sx={{ borderColor: "rgba(255,255,255,0.2)", my: 1.5 }} />
+  
+  <Button fullWidth onClick={() => { navigate("/clients/login"); closeSidebar(); }} variant="contained" sx={{ /* your logout styles */ }}>
+    <LogoutIcon sx={{ mr: 1, fontSize: 18 }} /> Sign Out
+  </Button>
+</Box>
+
 
       <Backdrop 
         sx={{ 
@@ -896,19 +903,36 @@ export default function ClientDashboard() {
       />
 
       {/* MAIN CONTENT */}
-      <Box sx={{ 
-        flexGrow: 1, 
-        pt: 11, 
-        pb: 5, 
-        bgcolor: mainBg,
-        minHeight: "100vh",
-        filter: sidebarOpen ? "blur(4px) brightness(0.85)" : "none", 
-        transition: "all 0.3s ease"
-      }}>
-        <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, sm: 3, md: 4 }, py: 4 }}>
-          {renderOverview()}
-        </Box>
-      </Box>
+<Box sx={{ 
+  flexGrow: 1, 
+  pt: 11, 
+  pb: 5, 
+  bgcolor: mainBg,
+  minHeight: "100vh",
+  opacity: showProfile ? 0 : 1,        
+  visibility: showProfile ? "hidden" : "visible",  
+  pointerEvents: showProfile ? "none" : "auto",   
+  transition: "all 0.3s ease",
+  position: showProfile ? "fixed" : "relative",   
+  top: showProfile ? -100 : 0                    
+}}>
+
+  <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, sm: 3, md: 4 }, py: 4 }}>
+    {renderOverview()}
+  </Box>
+</Box>
+
+<ClientProfilePage
+  client={client}
+  showProfile={showProfile}
+  setShowProfile={setShowProfile}
+  isEditing={isEditing}
+  setIsEditing={setIsEditing}
+  profileImagePreview={profileImagePreview}
+  setProfileImagePreview={setProfileImagePreview}
+  formData={formData}
+  setFormData={setFormData}
+/>
     </Box>
   );
 }

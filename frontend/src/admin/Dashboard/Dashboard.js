@@ -1,65 +1,29 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
-  Box,
-  CssBaseline,
-  AppBar,
-  Toolbar,
-  Typography,
-  IconButton,
-  Drawer,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Badge,
-  Button,
-  Breadcrumbs,
-  Link,
-  Grid,
-  Paper,
-  Chip,
-  CircularProgress,
-  Alert,
-  ListItem,
-  ListItemSecondaryAction,
-  LinearProgress
+  Box,CssBaseline,
+  AppBar,Toolbar,Typography,IconButton,Drawer,List,
+  ListItemButton,ListItemIcon,ListItemText,Badge,Button,
+  Breadcrumbs,Link,Grid,Paper,
+  Chip,CircularProgress,Alert,ListItem,ListItemSecondaryAction,LinearProgress,
+  FormControl,InputLabel,Select,MenuItem,Divider 
 } from "@mui/material";
 
 import {
-  Menu as MenuIcon,
-  Dashboard as DashboardIcon,
-  Visibility as VisibilityIcon,
-  ReceiptLong as ReceiptIcon,
-  LibraryAdd as AddInvoiceIcon,
-  UploadFile as UploadProofIcon,
-  OpenInNew as OpenInNewIcon,
-  Notifications as NotificationsIcon,
-  Logout as LogoutIcon,
-  Home as HomeIcon,
-  Settings as SettingsIcon,
-  PieChart as PieChartIcon,
-  BarChart as BarChartIcon,
-  PictureAsPdf as PictureAsPdfIcon,
-  Image as ImageIcon,
-  Download as DownloadIcon,
-  Refresh as RefreshIcon,
-  Error as ErrorIcon,
-  Assessment as AssessmentIcon,
+  Menu as MenuIcon,Dashboard as DashboardIcon,Visibility as VisibilityIcon,
+  ReceiptLong as ReceiptIcon,LibraryAdd as AddInvoiceIcon,UploadFile as UploadProofIcon,
+  OpenInNew as OpenInNewIcon, Notifications as NotificationsIcon,Logout as LogoutIcon,
+  Home as HomeIcon,Settings as SettingsIcon, PieChart as PieChartIcon,
+  BarChart as BarChartIcon,PictureAsPdf as PictureAsPdfIcon,Image as ImageIcon,
+  Download as DownloadIcon,Refresh as RefreshIcon,Error as ErrorIcon,Assessment as AssessmentIcon,
 } from "@mui/icons-material";
 
 import { useNavigate, useLocation, Routes, Route } from "react-router-dom";
 import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,AreaChart, Area, BarChart, Bar, 
+  PieChart,Pie,Cell,Tooltip,Legend,ResponsiveContainer,AreaChart, Area, BarChart, Bar, 
   CartesianGrid, XAxis, YAxis, 
 } from "recharts";
 
-
-// ✅ LIGHT BLUE THEME COLORS
+//LIGHT BLUE THEME COLORS
 const drawerWidth = 280;
 const sidebarBg = "#3166AE";
 const sidebarText = "#ffffff";
@@ -151,12 +115,30 @@ const downloadProof = (proof) => {
   }
 };
 
-function DashboardHome({ clients = [], uploads = [] }) {
+function DashboardHome({ clients = [], uploads = [], invoices = [] }) {
+  // Year dropdown state
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear()); // 2026 current year
+  const [yearLoading, setYearLoading] = useState(false);
+
   const hasClients = (clients || []).length > 0;
   const uniqueCompanies = new Set(
     (clients || []).map((c) => c.company?.trim()).filter(Boolean)
   );
   const totalUploads = (uploads || []).length;
+
+  // Generate years: previous (2025), current (2026), next 5 years (2027-2031)
+  const getAvailableYears = () => {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    years.push(currentYear - 1); // Previous year: 2025
+    years.push(currentYear);     // Current year: 2026
+    for (let i = 1; i <= 5; i++) {
+      years.push(currentYear + i); // Future years: 2027-2031
+    }
+    return years;
+  };
+
+  const availableYears = getAvailableYears();
 
   const companiesWithData = Array.from(uniqueCompanies)
     .map((company) => {
@@ -176,46 +158,110 @@ function DashboardHome({ clients = [], uploads = [] }) {
     })
     .sort((a, b) => b.uploads - a.uploads);
 
-  const kpis = [
-    { label: "Total Clients", value: (clients || []).length, icon: "👥" },
-    { label: "Total Uploads", value: totalUploads, icon: "📎" },
-    {
-      label: "Active Companies",
-      value: companiesWithData.filter((c) => c.uploads > 0).length,
-      icon: "⚡",
+  // YEAR-FILTERED KPIs for bar graph - counts for selected year only
+  const yearKpis = [
+    { 
+      label: "Invoices", 
+      value: (invoices || []).filter((invoice) => {
+        try {
+          const date = invoice.created_at || invoice.invoice_date ? 
+                       new Date(invoice.created_at || invoice.invoice_date) : null;
+          return date && date.getFullYear() === selectedYear;
+        } catch {
+          return false;
+        }
+      }).length,
+      color: "#1976d2"
+    },
+    { 
+      label: "Clients", 
+      value: (clients || []).filter((client) => {
+        try {
+          const date = client.created_at ? new Date(client.created_at) : null;
+          return date && date.getFullYear() === selectedYear;
+        } catch {
+          return false;
+        }
+      }).length,
+      color: "#4caf50"
+    },
+    { 
+      label: "Proofs", 
+      value: (uploads || []).filter((upload) => {
+        try {
+          const date = upload.uploaded_at ? new Date(upload.uploaded_at) : null;
+          return date && date.getFullYear() === selectedYear;
+        } catch {
+          return false;
+        }
+      }).length,
+      color: "#ff9800"
     },
   ];
 
-  const timelineData = MONTH_NAMES.map((m, i) => ({
-    month: m,
-    uploads: (uploads || []).filter((upload) => {
-      try {
-        const date = upload.uploaded_at ? new Date(upload.uploaded_at) : null;
-        return date && date.getMonth() === i;
-      } catch {
-        return false;
-      }
-    }).length,
-    clients: (clients || []).filter((client) => {
+  // Filter data by selected year and generate monthly timeline
+  const timelineData = MONTH_NAMES.map((m, i) => {
+    const targetMonth = i; // 0=Jan, 1=Feb, etc.
+    const targetYear = selectedYear;
+
+    // Filter clients added in selected year/month
+    const monthlyClients = (clients || []).filter((client) => {
       try {
         const date = client.created_at ? new Date(client.created_at) : null;
-        return date && date.getMonth() === i;
+        return date && 
+               date.getFullYear() === targetYear && 
+               date.getMonth() === targetMonth;
       } catch {
         return false;
       }
-    }).length,
-  }));
+    }).length;
+
+    // Filter proofs uploaded in selected year/month  
+    const monthlyUploads = (uploads || []).filter((upload) => {
+      try {
+        const date = upload.uploaded_at ? new Date(upload.uploaded_at) : null;
+        return date && 
+               date.getFullYear() === targetYear && 
+               date.getMonth() === targetMonth;
+      } catch {
+        return false;
+      }
+    }).length;
+
+    // Filter invoices issued in selected year/month
+    const monthlyInvoices = (invoices || []).filter((invoice) => {
+      try {
+        const date = invoice.created_at || invoice.invoice_date ? 
+                     new Date(invoice.created_at || invoice.invoice_date) : null;
+        return date && 
+               date.getFullYear() === targetYear && 
+               date.getMonth() === targetMonth;
+      } catch {
+        return false;
+      }
+    }).length;
+
+    return {
+      month: m,
+      invoices: monthlyInvoices,
+      clients: monthlyClients,
+      uploads: monthlyUploads,
+    };
+  });
 
   const COLORS = [
     "#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8",
     "#82ca9d", "#ffc658", "#ff7300", "#a4de6c", "#d0ed57",
   ];
 
-  const pieData = companiesWithData.slice(0, 10).map((c, index) => ({
-    name: c.name.length > 20 ? `${c.name.substring(0, 17)}...` : c.name,
-    value: c.uploads,
-    fill: COLORS[index % COLORS.length],
-  }));
+ const pieData = companiesWithData.slice(0, 10).map((c, index) => ({
+  name: c.name.length > 20 ? `${c.name.substring(0, 17)}...` : c.name,
+  value: c.uploads,  // Original proof uploads (for pie chart dataKey="value")
+  proofs: c.uploads, // Keep for display purposes
+  fill: COLORS[index % COLORS.length],
+}));
+
+
 
   const topCompanies = companiesWithData.slice(0, 5);
 
@@ -232,6 +278,13 @@ function DashboardHome({ clients = [], uploads = [] }) {
     </Box>
   );
 
+  // Handle year selection change
+  const handleYearChange = (event) => {
+    setYearLoading(true);
+    setSelectedYear(event.target.value);
+    setTimeout(() => setYearLoading(false), 300); // Simulate loading
+  };
+
   return (
     <>
       <Box sx={{ display: 'flex', justifyContent: 'center', mb: 6 }}>
@@ -245,397 +298,589 @@ function DashboardHome({ clients = [], uploads = [] }) {
           }}
         >
           <PieChartIcon sx={{ mr: 1, fontSize: { xs: 28, md: 36 }, verticalAlign: 'middle' }} />
-          Dashboard Overview
+          Dashboard Overview - {selectedYear}
         </Typography>
       </Box>
 
-     {/* ✅ GRAPHS ONLY - NO KPI RECTANGLES/CARDS - CLEAN DASHBOARD */}
-<Box sx={{ 
-  mb: 8,
-  display: "flex", 
-  flexDirection: { xs: "column", lg: "row" }, 
-  alignItems: "flex-start", 
-  gap: 4,
-  maxWidth: 1400,
-  mx: "auto"
-}}>
-  
-  {/* PULSE GRAPH - NO PAPER/CARD - FULL WIDTH */}
-<Box sx={{ 
-  mb: 8,
-  width: "100%",
-  height: 420,  // Slightly taller without paper padding
-  mx: "auto",
-  position: "relative",
-  background: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)",  // Subtle dashboard bg
-  borderRadius: 3,
-  p: 3,  // Light padding instead of Paper
-  boxShadow: "0 8px 32px rgba(0,0,0,0.08)",  // Soft shadow
-  border: "1px solid rgba(255,255,255,0.6)",
-  backdropFilter: "blur(10px)"
-}}>
-  {/* Header - Centered */}
-  <Typography 
-    variant="h5" 
-    fontWeight={800} 
-    sx={{ 
-      mb: 4, 
-      color: "#1a1a1a",
-      textAlign: "center",
-      background: "linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)",
-      WebkitBackgroundClip: "text",
-      WebkitTextFillColor: "transparent",
-      position: "relative",
-      zIndex: 2
-    }}
-  >
-    📈 Analytics Overview
-  </Typography>
+      {/* Year Selection Dropdown */}
+      <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+        <Paper sx={{ 
+          p: 2, 
+          borderRadius: 3, 
+          boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+          background: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)",
+          border: "1px solid rgba(255,255,255,0.6)"
+        }}>
+          <FormControl variant="outlined" size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Select Year</InputLabel>
+            <Select
+              value={selectedYear}
+              onChange={handleYearChange}
+              label="Select Year"
+              disabled={yearLoading}
+              endAdornment={
+                yearLoading ? (
+                  <CircularProgress size={20} sx={{ mr: 1 }} />
+                ) : null
+              }
+            >
+              {availableYears.map((year) => (
+                <MenuItem key={year} value={year}>
+                  {year}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Typography variant="caption" sx={{ mt: 1, display: 'block', color: 'text.secondary', textAlign: 'center' }}>
+            Showing {selectedYear} data • Updates automatically
+          </Typography>
+        </Paper>
+      </Box>
 
-  {/* PULSE/AREA CHART */}
-  <ResponsiveContainer width="100%" height="90%">
-    <AreaChart data={timelineData}>
-      <defs>
-        {/* Pulse gradient fill */}
-        <linearGradient id="uploadsGradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#1976d2" stopOpacity={0.8}/>
-          <stop offset="50%" stopColor="#42a5f5" stopOpacity={0.4}/>
-          <stop offset="100%" stopColor="#90caf9" stopOpacity={0.1}/>
-        </linearGradient>
-        <linearGradient id="clientsGradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#4caf50" stopOpacity={0.8}/>
-          <stop offset="50%" stopColor="#81c784" stopOpacity={0.4}/>
-          <stop offset="100%" stopColor="#a5d6a7" stopOpacity={0.1}/>
-        </linearGradient>
-      </defs>
-      
-      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.04)" />
-      <XAxis 
-        dataKey="month" 
-        stroke="#666" 
-        fontSize={14} 
-        tickLine={false}
-        axisLine={false}
-      />
-      <YAxis 
-        stroke="#666" 
-        fontSize={14} 
-        tickLine={false}
-        axisLine={false}
-      />
-      <Tooltip 
-        contentStyle={{
-          background: "rgba(255,255,255,0.95)",
-          border: "1px solid rgba(25,118,210,0.2)",
-          borderRadius: 12,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.12)"
-        }}
-      />
-      <Legend 
-        wrapperStyle={{ 
-          paddingTop: 16,
-          background: "rgba(255,255,255,0.9)",
-          borderRadius: 8,
-          padding: 12,
-          boxShadow: "0 4px 16px rgba(0,0,0,0.08)"
-        }}
-      />
-      
-      {/* PULSE LINES WITH FILLED AREAS */}
-      <Area 
-        type="monotone" 
-        dataKey="uploads" 
-        stroke="#1976d2" 
-        strokeWidth={4}
-        fill="url(#uploadsGradient)"
-        name="Proofs Uploaded"
-        activeDot={{ 
-          fill: "#1976d2", 
-          strokeWidth: 3, 
-          r: 6,
-          stroke: "#ffffff"
-        }}
-      />
-      <Area 
-        type="monotone" 
-        dataKey="clients" 
-        stroke="#4caf50" 
-        strokeWidth={4}
-        fill="url(#clientsGradient)"
-        name="New Clients"
-        activeDot={{ 
-          fill: "#4caf50", 
-          strokeWidth: 3, 
-          r: 6,
-          stroke: "#ffffff"
-        }}
-      />
-    </AreaChart>
-  </ResponsiveContainer>
-</Box>
+      {/* GRAPHS SECTION */}
+      <Box sx={{ 
+        mb: 8,
+        display: "flex", 
+        flexDirection: { xs: "column", lg: "row" }, 
+        alignItems: "flex-start", 
+        gap: 4,
+        maxWidth: 1400,
+        mx: "auto"
+      }}>
+        
+        {/* PULSE GRAPH - Analytics Overview */}
+        <Box sx={{ 
+          mb: 8,
+          width: "65%",
+          height: 420,
+          mx: "auto",
+          position: "relative",
+          background: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)",
+          borderRadius: 3,
+          p: 3,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.08)",
+          border: "1px solid rgba(255,255,255,0.6)",
+          backdropFilter: "blur(10px)"
+        }}>
+          <Typography 
+            variant="h5" 
+            fontWeight={800} 
+            sx={{ 
+              mb: 4, 
+              color: "#1a1a1a",
+              textAlign: "center",
+              background: "linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              position: "relative",
+              zIndex: 2
+            }}
+          >
+            📈 {selectedYear} Analytics Overview
+          </Typography>
 
+          <ResponsiveContainer width="100%" height="90%">
+            <AreaChart data={timelineData}>
+              <defs>
+                {/* Invoices gradient */}
+                <linearGradient id="invoicesGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#1976d2" stopOpacity={0.8}/>
+                  <stop offset="50%" stopColor="#42a5f5" stopOpacity={0.4}/>
+                  <stop offset="100%" stopColor="#90caf9" stopOpacity={0.1}/>
+                </linearGradient>
+                {/* Clients gradient */}
+                <linearGradient id="clientsGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#4caf50" stopOpacity={0.8}/>
+                  <stop offset="50%" stopColor="#81c784" stopOpacity={0.4}/>
+                  <stop offset="100%" stopColor="#a5d6a7" stopOpacity={0.1}/>
+                </linearGradient>
+                {/* Uploads gradient */}
+                <linearGradient id="uploadsGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#ff9800" stopOpacity={0.8}/>
+                  <stop offset="50%" stopColor="#ffb74d" stopOpacity={0.4}/>
+                  <stop offset="100%" stopColor="#ffe0b2" stopOpacity={0.1}/>
+                </linearGradient>
+              </defs>
+              
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.04)" />
+              <XAxis 
+                dataKey="month" 
+                stroke="#666" 
+                fontSize={14} 
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis 
+                stroke="#666" 
+                fontSize={14} 
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip 
+                contentStyle={{
+                  background: "rgba(255,255,255,0.95)",
+                  border: "1px solid rgba(25,118,210,0.2)",
+                  borderRadius: 12,
+                  boxShadow: "0 8px 32px rgba(0,0,0,0.12)"
+                }}
+              />
+              <Legend 
+                wrapperStyle={{ 
+                  paddingTop: 16,
+                  background: "rgba(255,255,255,0.9)",
+                  borderRadius: 8,
+                  padding: 12,
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.08)"
+                }}
+              />
+              
+              {/* Three data series: Invoices, Clients, Uploads */}
+              <Area 
+                type="monotone" 
+                dataKey="invoices" 
+                stroke="#1976d2" 
+                strokeWidth={4}
+                fill="url(#invoicesGradient)"
+                name="Invoices Issued"
+                activeDot={{ 
+                  fill: "#1976d2", 
+                  strokeWidth: 3, 
+                  r: 6,
+                  stroke: "#ffffff"
+                }}
+              />
+              <Area 
+                type="monotone" 
+                dataKey="clients" 
+                stroke="#4caf50" 
+                strokeWidth={4}
+                fill="url(#clientsGradient)"
+                name="Clients Added"
+                activeDot={{ 
+                  fill: "#4caf50", 
+                  strokeWidth: 3, 
+                  r: 6,
+                  stroke: "#ffffff"
+                }}
+              />
+              <Area 
+                type="monotone" 
+                dataKey="uploads" 
+                stroke="#ff9800" 
+                strokeWidth={4}
+                fill="url(#uploadsGradient)"
+                name="Proofs Uploaded"
+                activeDot={{ 
+                  fill: "#ff9800", 
+                  strokeWidth: 3, 
+                  r: 6,
+                  stroke: "#ffffff"
+                }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Box>
 
-  {/* THIN BAR GRAPH - KPI Metrics */}
+        {/* THIN BAR GRAPH - YEAR-FILTERED KPI METRICS */}
+        <Paper sx={{ 
+          flex: { xs: 1, lg: 1 },
+          p: 3, 
+          height: 400,
+          borderRadius: 4,
+          backdropFilter: "blur(20px)",
+          background: "rgba(255, 255, 255, 0.95)",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+          border: "1px solid rgba(255,255,255,0.3)",
+          display: "flex",
+          flexDirection: "column"
+        }}>
+          <Typography variant="h6" fontWeight={800} sx={{ 
+            mb: 3, 
+            color: "#1a1a1a",
+            textAlign: "center",
+            background: "linear-gradient(135deg, #4caf50 0%, #81c784 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent"
+          }}>
+            📊 {selectedYear} Summary
+          </Typography>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart 
+              data={yearKpis.map(kpi => ({ 
+                name: kpi.label, 
+                value: kpi.value,
+                fill: kpi.color
+              }))}
+              layout="vertical"
+              margin={{ right: 30 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis 
+                type="number" 
+                stroke="#666" 
+                fontSize={12} 
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis 
+                dataKey="name" 
+                type="category" 
+                stroke="#666" 
+                fontSize={12} 
+                tickLine={false}
+                axisLine={false}
+                width={100}
+              />
+              <Tooltip />
+              <Bar 
+                dataKey="value" 
+                radius={[4, 4, 0, 0]} 
+                barSize={30}
+              >
+                {yearKpis.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Paper>
+      </Box>
+
+      {/* HORIZONTAL CARDS - Company Distribution + Top Companies */}
+<Box sx={{ mb: 6 }}>
   <Paper sx={{ 
-    flex: { xs: 1, lg: 1 },
-    p: 3, 
-    height: 400,
+    p: 5,
+    height: 580,
     borderRadius: 4,
-    backdropFilter: "blur(20px)",
-    background: "rgba(255, 255, 255, 0.95)",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
-    border: "1px solid rgba(255,255,255,0.3)",
-    display: "flex",
-    flexDirection: "column"
+    boxShadow: "0 32px 100px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.25)",
+    backdropFilter: "blur(32px)",
+    background: "linear-gradient(145deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.85) 100%)",
+    border: "1px solid rgba(255,255,255,0.4)",
+    position: 'relative',
+    overflow: 'hidden',
+    mx: 'auto',
+    maxWidth: 1000
   }}>
-    <Typography variant="h6" fontWeight={800} sx={{ 
-      mb: 3, 
-      color: "#1a1a1a",
-      textAlign: "center",
-      background: "linear-gradient(135deg, #4caf50 0%, #81c784 100%)",
-      WebkitBackgroundClip: "text",
-      WebkitTextFillColor: "transparent"
+    {/* Premium Header */}
+    <Box sx={{ 
+      display: "flex", 
+      alignItems: "center", 
+      justifyContent: 'center',
+      mb: 4,
+      position: 'relative'
     }}>
-      📊 Overall Review
-    </Typography>
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={kpis.map(kpi => ({ 
-        name: kpi.label.slice(0, 12) + (kpi.label.length > 12 ? '...' : ''), 
-        value: kpi.value 
-      }))}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="name" stroke="#666" fontSize={11} angle={-45} textAnchor="end" height={70} />
-        <YAxis stroke="#666" fontSize={12} width={50} />
-        <Tooltip />
-        <Bar dataKey="value" fill="#1976d2" radius={[4, 4, 0, 0]} barSize={28} />
-      </BarChart>
-    </ResponsiveContainer>
+      <Box sx={{
+        p: 2,
+        mr: 2,
+        borderRadius: '50%',
+        background: 'linear-gradient(135deg, #1976d2, #42a5f5, #4caf50)',
+        boxShadow: '0 12px 40px rgba(25,118,210,0.3)'
+      }}>
+        <PieChartIcon sx={{ fontSize: 32, color: 'white' }} />
+      </Box>
+      <Typography variant="h5" fontWeight={800} sx={{ 
+        background: "linear-gradient(135deg, #1976d2 0%, #42a5f5 50%, #4caf50 100%)",
+        WebkitBackgroundClip: "text",
+        WebkitTextFillColor: "transparent",
+        fontSize: { xs: '1.3rem', md: '1.5rem' },
+        letterSpacing: '0.5px'
+      }}>
+        Company Distribution Analytics
+      </Typography>
+    </Box>
+
+    {/* Split Layout: Companies List | Pie Chart */}
+    <Box sx={{ 
+      display: 'flex', 
+      height: 450, 
+      gap: 4,
+      alignItems: 'stretch',
+      flexDirection: { xs: 'column', lg: 'row' }
+    }}>
+      {/* LEFT: Company List */}
+      <Box sx={{ 
+        flex: { lg: 0.4 }, 
+        minWidth: { lg: 280 },
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        <Typography variant="subtitle1" fontWeight={700} sx={{ 
+          mb: 2.5, 
+          color: "#1a202c",
+          fontSize: '1rem'
+        }}>
+          Top Companies
+        </Typography>
+        
+        {/* Company List with Gradient Bars */}
+        <Box sx={{ 
+          flexGrow: 1, 
+          overflowY: 'auto',
+          pr: 1
+        }}>
+          {pieData.slice(0, 10).map((company, idx) => (
+            <Box key={idx} sx={{ 
+              mb: 2.5, 
+              p: 2.5, 
+              borderRadius: 3,
+              background: "rgba(255,255,255,0.7)",
+              border: '1px solid rgba(255,255,255,0.5)',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              '&:hover': {
+                background: "rgba(25,118,210,0.08)",
+                transform: 'translateX(4px)',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.12)'
+              }
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Box sx={{ 
+                  width: 12, 
+                  height: 12, 
+                  borderRadius: '50%', 
+                  bgcolor: company.fill, 
+                  mr: 2,
+                  boxShadow: `0 4px 12px ${company.fill}40`
+                }} />
+                <Typography variant="subtitle2" fontWeight={700} sx={{ 
+                  color: "#1a202c",
+                  fontSize: '0.95rem',
+                  mr: 'auto',
+                  minWidth: 0,
+                  overflow: 'hidden'
+                }}>
+                  {company.name.length > 25 ? `${company.name.substring(0, 22)}...` : company.name}
+                </Typography>
+                <Typography variant="body2" fontWeight={700} sx={{ 
+                  color: company.fill,
+                  fontSize: '0.9rem'
+                }}>
+                  {company.value}
+                </Typography>
+              </Box>
+              {/* Animated Progress Bar */}
+              <Box sx={{ 
+                height: 6, 
+                borderRadius: 3, 
+                bgcolor: 'rgba(0,0,0,0.08)',
+                overflow: 'hidden'
+              }}>
+                <Box sx={{
+                  height: '100%',
+                  borderRadius: 3,
+                  bgcolor: company.fill,
+                  width: `${Math.min((company.value / Math.max(...pieData.map(d => d.value))) * 100, 100)}%`,
+                  transition: 'width 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: `0 0 12px ${company.fill}30`
+                }} />
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+      {/* VERTICAL DIVIDER */}
+      <Box sx={{ 
+        width: { lg: '1px' }, 
+        mx: 2,
+        background: 'linear-gradient(to bottom, transparent, #e2e8f0, transparent)',
+        position: 'relative',
+        '&::before, &::after': {
+          content: '""',
+          position: 'absolute',
+          left: '50%',
+          width: 3,
+          height: 20,
+          background: '#1976d2',
+          transform: 'translateX(-50%)',
+          borderRadius: '50%'
+        },
+        '&::before': { top: 0 },
+        '&::after': { bottom: 0 }
+      }} />
+
+      {/* RIGHT: Premium Pie Chart */}
+      <Box sx={{ 
+        flex: 1, 
+        minWidth: 0,
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        {pieData.length === 0 ? (
+          <Box sx={{ 
+            height: "100%", 
+            display: "flex", 
+            flexDirection: 'column',
+            alignItems: "center", 
+            justifyContent: "center",
+            textAlign: 'center',
+            p: 4
+          }}>
+            <PieChartIcon sx={{ 
+              fontSize: 80, 
+              color: 'rgba(0,0,0,0.08)', 
+              mb: 3 
+            }} />
+            <Typography variant="h6" sx={{ 
+              color: "text.secondary", 
+              fontWeight: 600,
+              mb: 1 
+            }}>
+              No Distribution Data
+            </Typography>
+            <Typography variant="body1" sx={{ color: "text.disabled" }}>
+              {hasClients ? "No proofs uploaded yet" : "Add clients first"}
+            </Typography>
+          </Box>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              {/* Main Pie with Enhanced Styling */}
+              <Pie
+                data={pieData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                innerRadius="25%"
+                outerRadius="85%"
+                paddingAngle={3}
+                cornerRadius={12}
+                strokeWidth={3}
+                stroke="rgba(255,255,255,0.6)"
+              >
+                {pieData.map((entry, index) => (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={entry.fill}
+                    stroke="rgba(255,255,255,0.8)"
+                    strokeWidth={3}
+                  />
+                ))}
+              </Pie>
+              
+              {/* Animated Center Ring */}
+              <Pie
+                data={[{ value: 1 }]}
+                dataKey="value"
+                cx="50%"
+                cy="50%"
+                innerRadius="32%"
+                outerRadius="36%"
+                fill="#f8fafc"
+                stroke="#e2e8f0"
+                strokeWidth={4}
+              />
+
+              {/* Premium Tooltip */}
+              <Tooltip 
+                contentStyle={{
+                  background: "rgba(255,255,255,0.98)",
+                  border: "1px solid rgba(25,118,210,0.2)",
+                  borderRadius: 20,
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+                  backdropFilter: 'blur(20px)',
+                  padding: '16px'
+                }}
+                labelStyle={{ fontWeight: 700, color: '#1a1a1a', fontSize: '14px' }}
+                itemStyle={{ fontWeight: 600, fontSize: '16px' }}
+              />
+
+              {/* Center Stats */}
+              <text 
+                x="50%" 
+                y="50%" 
+                textAnchor="middle" 
+                dominantBaseline="middle"
+                style={{
+                  fontSize: '24px',
+                  fontWeight: '800',
+                  fill: '#1976d2',
+                  textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+              >
+                {pieData.reduce((sum, d) => sum + d.value, 0)}
+              </text>
+              <text 
+                x="50%" 
+                y="50%" 
+                textAnchor="middle" 
+                dominantBaseline="middle"
+                dy="28"
+                style={{
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  fill: '#64748b'
+                }}
+              >
+                Total Proofs
+              </text>
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </Box>
+    </Box>
   </Paper>
 </Box>
 
-{/* HORIZONTAL CARDS - Company Distribution + Top Companies */}
-<Box sx={{ mb: 6 }}>
-  <Grid 
-    container 
-    spacing={4} 
-    sx={{ 
-      justifyContent: 'center',
-      alignItems: 'stretch'
-    }}
-  >
-    {/* COMPANY DISTRIBUTION */}
-    <Grid item xs={12} md={8} lg={7}>
-      <Paper sx={{ 
-        p: 4,
-        height: 550,
-        borderRadius: 3,
-        boxShadow: 4, 
-        backdropFilter: "blur(20px)",
-        background: "rgba(255, 255, 255, 0.95)",
-        border: "1px solid rgba(255,255,255,0.3)",
-        display: 'flex',
-        flexDirection: 'column'
-      }}>
-        <Typography variant="h6" fontWeight={700} gutterBottom sx={{ 
-          mb: 3, 
-          color: "#1a1a1a", 
-          display: "flex", 
-          alignItems: "center",
-          justifyContent: 'center',
-          fontSize: '1.3rem' 
-        }}>
-          Company Distribution <PieChartIcon sx={{ ml: 1, fontSize: 26 }} />
-        </Typography>
-        <Box sx={{ height: 450, width: '100%', minWidth: 450, flexGrow: 1 }}>
-          {pieData.length === 0 ? (
-            <Box sx={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Typography variant="body1" sx={{ color: "text.secondary", textAlign: "center", fontSize: '1.1rem' }}>
-                {hasClients ? "No upload data yet" : "Add clients to see distribution"}
-              </Typography>
-            </Box>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius="30%"
-                  outerRadius="70%"
-                  paddingAngle={1}
-                  cornerRadius={6}
-                  labelLine={false}
-                  label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend 
-                  content={renderLegend}
-                  wrapperStyle={{ 
-                    position: 'absolute', 
-                    bottom: 10, 
-                    left: '50%', 
-                    transform: 'translateX(-50%)',
-                    maxWidth: '90%',
-                    padding: '10px'
-                  }} 
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </Box>
-      </Paper>
-    </Grid>
 
-    {/* TOP 5 COMPANIES */}
-    <Grid item xs={12} md={4} lg={5} sx={{ display: 'flex' }}>
-      <Paper sx={{ 
-        p: 4,
-        height: 550,
-        flexGrow: 1,
-        borderRadius: 3,
-        boxShadow: 4, 
-        backdropFilter: "blur(20px)",
-        background: "rgba(255, 255, 255, 0.95)",
-        border: "1px solid rgba(255,255,255,0.3)",
-        display: 'flex',
-        flexDirection: 'column'
-      }}>
-        <Typography variant="h6" fontWeight={700} gutterBottom sx={{ 
-          mb: 3, 
-          color: "#1a1a1a",
-          display: "flex", 
-          alignItems: "center",
-          justifyContent: 'center',
-          fontSize: '1.3rem'
-        }}>
-          Top 5 Companies <BarChartIcon sx={{ ml: 1, fontSize: 26 }} />
-        </Typography>
-        <Box sx={{ overflow: "auto", maxHeight: 450, flexGrow: 1, pb: 1 }}>
-          {topCompanies.length > 0 ? (
-            topCompanies.map((company, idx) => (
-              <Paper key={company.name} sx={{ 
-                display: "grid", 
-                gridTemplateColumns: "1.8fr 1fr 1fr 0.8fr",
-                alignItems: "center", 
-                p: 3,
-                backdropFilter: "blur(10px)",
-                background: "rgba(248, 249, 250, 0.9)", 
-                borderRadius: 2, 
-                mb: 2.5,
-                borderLeft: idx === 0 ? '5px solid #1976d2' : 'none',
-                minHeight: 70,
-                boxShadow: "0 4px 16px rgba(0,0,0,0.08)"
-              }}>
-                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                  <Typography variant="subtitle1" fontWeight={700} sx={{ 
-                    color: "#1a1a1a", 
-                    fontSize: '1rem',
-                    lineHeight: 1.2,
-                    mb: 0.5
-                  }}>
-                    {company.name.length > 25 ? `${company.name.substring(0, 22)}...` : company.name}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: "#666", fontSize: '0.8rem', fontWeight: 500 }}>
-                    {company.clients} total clients
-                  </Typography>
-                </Box>
-                <Typography variant="h6" fontWeight={700} sx={{ 
-                  color: "#1976d2", 
-                  textAlign: 'center',
-                  fontSize: '1.3rem'
-                }}>
-                  {company.clients}
-                </Typography>
-                <Typography variant="h6" fontWeight={700} sx={{ 
-                  color: "#4caf50", 
-                  textAlign: 'center',
-                  fontSize: '1.3rem'
-                }}>
-                  {company.uploads}
-                </Typography>
-                <Typography variant="h6" fontWeight={700} sx={{ 
-                  color: "#666", 
-                  textAlign: 'right',
-                  fontSize: '1.2rem'
-                }}>
-                  {company.percentage.toFixed(1)}%
-                </Typography>
-              </Paper>
-            ))
-          ) : (
-            <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Typography variant="body1" sx={{ color: "text.secondary", textAlign: "center", fontSize: '1.1rem' }}>
-                No company data yet
-              </Typography>
-            </Box>
-          )}
-        </Box>
-      </Paper>
-    </Grid>
-  </Grid>
-</Box>
 
-{/* MONTHLY ACTIVITY */}
-<Grid container spacing={3}>
-  <Grid item xs={12}>
-    <Paper sx={{ 
-      p: 4, 
-      borderRadius: 3, 
-      backdropFilter: "blur(20px)",
-      background: "rgba(255, 255, 255, 0.95)",
-      border: "1px solid rgba(255,255,255,0.3)",
-      boxShadow: "0 12px 40px rgba(0,0,0,0.1)"
-    }}>
-      <Typography variant="h5" fontWeight={800} gutterBottom sx={{ 
-        mb: 4, 
-        color: "#1a1a1a", 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 2,
-        fontSize: '1.4rem'
-      }}>
-        <BarChartIcon sx={{ fontSize: 28, color: "#1976d2" }} />
-        Monthly Activity
-      </Typography>
-      <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap", "& > *": { minWidth: 140, flex: 1 } }}>
-        {timelineData.map((data, i) => (
-          <Paper key={i} sx={{ 
-            p: 3, 
-            textAlign: "center", 
+      {/* MONTHLY ACTIVITY */}
+      <Grid container spacing={3}>
+        <Grid item xs={12}>
+          <Paper sx={{ 
+            p: 4, 
             borderRadius: 3, 
-            backdropFilter: "blur(12px)",
-            background: "rgba(248, 249, 250, 0.95)",
+            backdropFilter: "blur(20px)",
+            background: "rgba(255, 255, 255, 0.95)",
             border: "1px solid rgba(255,255,255,0.3)",
-            transition: "all 0.3s ease",
-            "&:hover": {
-              transform: "translateY(-6px)",
-              boxShadow: "0 16px 32px rgba(0,0,0,0.15)"
-            },
-            flex: 1,
-            minWidth: 140
+            boxShadow: "0 12px 40px rgba(0,0,0,0.1)"
           }}>
-            <Typography variant="h4" fontWeight={800} sx={{ color: "#1976d2", mb: 1 }}>
-              {data.uploads}
+            <Typography variant="h5" fontWeight={800} gutterBottom sx={{ 
+              mb: 4, 
+              color: "#1a1a1a", 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 2,
+              fontSize: '1.4rem'
+            }}>
+              <BarChartIcon sx={{ fontSize: 28, color: "#1976d2" }} />
+              {selectedYear} Monthly Activity
             </Typography>
-            <Typography variant="h6" sx={{ color: "#1a1a1a", fontWeight: 700, mb: 0.5 }}>
-              {data.month}
-            </Typography>
-            <Typography variant="body1" sx={{ color: "#666", fontWeight: 600 }}>
-              ({data.clients} new)
-            </Typography>
+            <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap", "& > *": { minWidth: 140, flex: 1 } }}>
+              {timelineData.map((data, i) => (
+                <Paper key={i} sx={{ 
+                  p: 3, 
+                  textAlign: "center", 
+                  borderRadius: 3, 
+                  backdropFilter: "blur(12px)",
+                  background: "rgba(248, 249, 250, 0.95)",
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  transition: "all 0.3s ease",
+                  "&:hover": {
+                    transform: "translateY(-6px)",
+                    boxShadow: "0 16px 32px rgba(0,0,0,0.15)"
+                  },
+                  flex: 1,
+                  minWidth: 140
+                }}>
+                  <Typography variant="h4" fontWeight={800} sx={{ color: "#1976d2", mb: 1 }}>
+                    {data.uploads}
+                  </Typography>
+                  <Typography variant="h6" sx={{ color: "#1a1a1a", fontWeight: 700, mb: 0.5 }}>
+                    {data.month}
+                  </Typography>
+                  <Typography variant="body1" sx={{ color: "#666", fontWeight: 600 }}>
+                    ({data.clients} new • {data.invoices} inv)
+                  </Typography>
+                </Paper>
+              ))}
+            </Box>
           </Paper>
-        ))}
-      </Box>
-    </Paper>
-  </Grid>
-</Grid>
-</>
+        </Grid>
+      </Grid>
+    </>
   );
 }
 

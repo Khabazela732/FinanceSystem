@@ -39,7 +39,7 @@ import ClientProofUploadPage from './client/Dashboard/ClientProofUploadPage';
 import ClientInvoicesPage from './client/Dashboard/ClientInvoicesPage';
 import ClientPaymentPage from './client/Dashboard/ClientPaymentPage';
 import MonthlyReports from './admin/Dashboard/MonthlyReports';
-
+import ClientProfilePage from "./client/Dashboard/ClientProfilePage";
 
 function EntranceScreen() {
   const navigate = useNavigate();
@@ -447,12 +447,13 @@ export default function App() {
       <Route path="/clients/dashboard/:id" element={<ClientDashboard />} />
       <Route path="/uploaded-proofs" element={<UploadedProofs />} />
       <Route path="/clients/ClientProfileUpdate" element={<ClientProfileUpdate />} />
+      <Route path="/clients/ClientProfilePage" element={<ClientProfilePage />} />
       <Route path="/settings" element={<AdminSettings />} />
       <Route path="/proofs/:id" element={<ProofViewer />} />
       <Route path="/client/proof-upload/:id" element={<ClientProofUploadPage />} />
       <Route path="/client/invoices/:id" element={<ClientInvoicesPage />} />
       <Route path="/client/payments/:id" element={<ClientPaymentPage />} />
-       <Route path="reports/monthly" element={<MonthlyReports />} />
+      <Route path="reports/monthly" element={<MonthlyReports />} />
        
     </Routes>
   );

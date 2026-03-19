@@ -234,73 +234,76 @@ async function generateInvoicePDF(invoice) {
   
   const page = await browser.newPage();
   
-  await page.setContent(`
+await page.setContent(`
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Invoice #${invoice.invoice_number}</title>
+  <title>Reference Number:${invoice.invoice_number}</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 40px 20px; }
-    
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 3px solid #3166AE; }
-    .logo { font-size: 28px; font-weight: 700; color: #3166AE; }
-    .invoice-meta { text-align: right; }
-    .invoice-number { font-size: 24px; font-weight: 700; color: #3166AE; margin-bottom: 5px; }
-    
-    .client-section { display: flex; justify-content: space-between; margin-bottom: 40px; }
-    .company-info, .client-info { width: 48%; background: #f8f9fa; padding: 20px; border-radius: 8px; }
-    
-    .table-container { margin-bottom: 30px; overflow: hidden; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    table { width: 100%; border-collapse: collapse; background: white; }
-    th { background: #3166AE; color: white; padding: 18px 12px; text-align: left; font-weight: 600; }
-    td { padding: 16px 12px; border-bottom: 1px solid #eee; }
-    .amount { text-align: right; font-weight: 600; }
-    
-    .totals { background: #f8f9fa; padding: 20px; border-radius: 8px; }
-    .total-row { display: flex; justify-content: flex-end; margin-bottom: 8px; font-size: 16px; }
-    .total-amount { font-size: 28px; font-weight: 700; color: #3166AE; }
-    
-    .payment-info { background: #e8f4f8; padding: 20px; border-radius: 8px; margin-top: 30px; }
-    .status { display: inline-block; padding: 8px 16px; border-radius: 20px; color: white; font-weight: 600; 
-      ${invoice.status === 'paid' ? 'background: #28a745;' : 'background: #ffc107; color: #212529;'}
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.5;
+      color: #333;
+      margin: 0;
+      padding: 20px;
     }
-    
-    .footer { margin-top: 40px; text-align: center; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px; }
-    @media print { body { padding: 20px; } }
+    .section {
+      margin-bottom: 20px;
+    }
+    h2, h3, p, table, strong, span {
+      margin: 0 0 8px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #ddd;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 10px;
+      vertical-align: top;
+      border: 1px solid #ddd;
+    }
+    th {
+      background: #f0f0f0;
+      font-weight: bold;
+    }
+    .total-row {
+      font-weight: bold;
+      font-size: 18px;
+    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="logo">Internship Success</div>
-    <div class="invoice-meta">
-      <div class="invoice-number">#${invoice.invoice_number}</div>
-      <div>Date: ${new Date(invoice.invoice_date).toLocaleDateString('en-ZA')}</div>
-      <div>Due: ${new Date(invoice.due_date).toLocaleDateString('en-ZA')}</div>
-      <span class="status">${invoice.status.toUpperCase()}</span>
-    </div>
-  </div>
 
-  <div class="client-section">
-    <div class="company-info">
-      <h3>FROM:</h3>
-      <strong>Internship Success</strong><br>
-      1st Floor,Shell House,<br>
+  <h2>Reference Number:${invoice.invoice_number}</h2>
+  <p><strong>Issued Date:</strong> ${new Date(invoice.invoice_date).toLocaleDateString('en-ZA')}</p>
+  <p><strong>Due Date:</strong> ${new Date(invoice.due_date).toLocaleDateString('en-ZA')}</p>
+  <p>Status: <span class="status">${invoice.status.toUpperCase()}</span></p>
+
+  <div class="section">
+    <h3>From – Internship Success</h3>
+    <p>
+      Internship Success<br>
+      1st Floor, Shell House,<br>
       Ferreira Street, Mbombela<br>
       South Africa, 1200<br>
       Email: mkhizesenzo732@gmail.com<br>
       Tel: +27 11 123 4567
-    </div>
-    <div class="client-info">
-      <h3>BILL TO:</h3>
-      <strong>${invoice.company_name}</strong><br>
-      ${invoice.customer_reference || 'N/A'}<br>
-      Client ID: ${invoice.client_id}
-    </div>
+    </p>
   </div>
 
-  <div class="table-container">
+  <div class="section">
+    <h3>To – ${invoice.company_name}</h3>
+    <p>
+      ${invoice.company_name}<br>
+      ${invoice.customer_reference || 'N/A'}<br>
+      Client ID: ${invoice.client_id}
+    </p>
+  </div>
+
+  <div class="section">
     <table>
       <thead>
         <tr>
@@ -310,51 +313,55 @@ async function generateInvoicePDF(invoice) {
       </thead>
       <tbody>
         <tr>
-          <td><strong>Professional Services - ${invoice.customer_reference || 'General'}</strong></td>
-          <td class="amount">R ${invoice.amount?.toLocaleString()}</td>
+          <td>
+            <strong>Professional Services – ${invoice.customer_reference || 'General'}</strong>
+          </td>
+          <td>R ${invoice.amount?.toLocaleString()}</td>
         </tr>
-        <tr style="background: #f8f9fa;">
+        <tr>
           <td>Balance Due</td>
-          <td class="amount">R ${invoice.amount_due?.toLocaleString()}</td>
+          <td>R ${invoice.amount_due?.toLocaleString()}</td>
         </tr>
       </tbody>
     </table>
   </div>
 
-  <div class="totals">
-    <div class="total-row">
-      <span>Total Amount Due:</span>
-      <span class="total-amount">R ${invoice.amount_due?.toLocaleString()}</span>
-    </div>
+  <div class="section">
+    <p class="total-row">Total Amount Due: R ${invoice.amount_due?.toLocaleString()}</p>
   </div>
 
-  <div class="payment-info">
-    <h4>Payment Instructions:</h4>
-    <p><strong>Bank:</strong> FNB | <strong>Acc:</strong> 123456789012<br>
-    <strong>Ref:</strong> ${invoice.invoice_number}<br>
-    <strong>Due:</strong> ${new Date(invoice.due_date).toLocaleDateString('en-ZA')}</p>
+  <div class="section">
+    <h3>Payment Instructions</h3>
+    <p>
+      <strong>Bank:</strong> FNB<br>
+      <strong>Account:</strong> 123456789012<br>
+      <strong>Reference:</strong> ${invoice.invoice_number}<br>
+      <strong>Due date:</strong> ${new Date(invoice.due_date).toLocaleDateString('en-ZA')}
+    </p>
     <p>Please email proof of payment to: <strong>mkhizesenzo732@gmail.com</strong></p>
   </div>
 
-  <footer class="footer">
-    <p>Regards | Internship Success © 2026</p>
-  </footer>
+  <div class="section" style="margin-top: 30px; font-size: 14px; color: #555;">
+    <p>Regards,<br>
+       Internship Success © 2026</p>
+  </div>
+
 </body>
 </html>
-  `, { waitUntil: 'networkidle0' });
+`, {
+  waitUntil: 'networkidle0',
+  timeout: 240000
+});
+
 
   const pdf = await page.pdf({
     format: 'A4',
     printBackground: true,
     margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' }
   });
-
   await browser.close();
   return pdf;
 }
-
-
-
 
 //Cloudinary config
 console.log("  Cloudinary config check:");
@@ -520,8 +527,6 @@ async function sendClientWelcomeEmail(clientEmail, clientUsername, tempPassword,
     throw error;
   }
 }
-
-
 
 //PERFECTLY ALIGNED WITH ClientForm.js - SENDS WELCOME EMAIL!
 app.post('/api/clients', authenticateAdmin, async (req, res) => {
@@ -1043,33 +1048,48 @@ app.post("/api/invoices", authenticateAdmin, async (req, res) => {
 
     // ✅ VALIDATE INPUTS
     const allowedStatuses = ["waiting_for_payment", "partially_paid", "paid"];
-    const finalStatus = allowedStatuses.includes(status) ? status : "waiting_for_payment";
+    const finalStatus =
+      allowedStatuses.includes(status) ? status : "waiting_for_payment";
 
-    if (!company_name?.trim()) return res.status(400).json({ message: "Company name required" });
-    if (!invoice_number?.trim()) return res.status(400).json({ message: "Invoice number required" });
-    if (!client_id || isNaN(client_id)) return res.status(400).json({ message: "Valid client ID required" });
-    if (!invoice_date) return res.status(400).json({ message: "Invoice date required" });
-    if (!due_date) return res.status(400).json({ message: "Due date required" });
-    if (!amount || Number(amount) <= 0) return res.status(400).json({ message: "Valid invoice amount required" });
+    if (!company_name?.trim())
+      return res.status(400).json({ message: "Company name required" });
+    if (!invoice_number?.trim())
+      return res.status(400).json({ message: "Invoice number required" });
+    if (!client_id || isNaN(client_id))
+      return res.status(400).json({ message: "Valid client ID required" });
+    if (!invoice_date)
+      return res.status(400).json({ message: "Invoice date required" });
+    if (!due_date)
+      return res.status(400).json({ message: "Due date required" });
+    if (!amount || Number(amount) <= 0)
+      return res.status(400).json({ message: "Valid invoice amount required" });
 
     // ✅ CHECK DUPLICATES
-    const duplicate = await safeQuery("SELECT id FROM invoices WHERE invoice_number = ?", [invoice_number.trim()]);
-    if (duplicate.length > 0) return res.status(409).json({ message: "Invoice number already exists" });
+    const duplicate = await safeQuery(
+      "SELECT id FROM invoices WHERE invoice_number = ?",
+      [invoice_number.trim()]
+    );
+    if (duplicate.length > 0)
+      return res.status(409).json({ message: "Invoice number already exists" });
 
     // ✅ VERIFY CLIENT EXISTS
     const client = await safeQuery(
-      "SELECT id, company, email, fullname FROM host_employers WHERE id = ?", 
+      "SELECT id, company, email, fullname FROM host_employers WHERE id = ?",
       [client_id]
     );
-    if (!client.length) return res.status(404).json({ message: "Client not found" });
+    if (!client.length)
+      return res.status(404).json({ message: "Client not found" });
 
     const clientEmail = client[0].email;
     const clientCompany = client[0].company;
     console.log("✅ Client verified:", { clientEmail, clientCompany });
 
     // ✅ CREATE INVOICE
-    const issuedAt = finalStatus !== "waiting_for_payment" ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null;
-    
+    const issuedAt =
+      finalStatus !== "waiting_for_payment"
+        ? new Date().toISOString().slice(0, 19).replace("T", " ")
+        : null;
+
     const result = await safeQuery(
       `INSERT INTO invoices (
         client_id, company_name, invoice_number, customer_reference,
@@ -1102,7 +1122,7 @@ app.post("/api/invoices", authenticateAdmin, async (req, res) => {
       redirect: "/admin/invoices"
     });
 
-    // 👇 FIRE-AND-FORGET BACKGROUND TASK (non-blocking)
+    // 👇 FIRE-AND-FORGET BACKGROUND TASK (PDF + email)
     setImmediate(async () => {
       try {
         console.log("🔄 Background: Starting PDF + email for", invoice_number);
@@ -1112,7 +1132,7 @@ app.post("/api/invoices", authenticateAdmin, async (req, res) => {
           id: invoiceId,
           invoice_number: invoice_number.trim(),
           company_name: company_name.trim(),
-          customer_reference: customer_reference?.trim() || 'General Services',
+          customer_reference: customer_reference?.trim() || "General Services",
           client_id: client_id,
           invoice_date: invoice_date,
           due_date: due_date,
@@ -1136,84 +1156,62 @@ app.post("/api/invoices", authenticateAdmin, async (req, res) => {
         // SEND CLIENT EMAIL WITH PDF ATTACHMENT
         console.log("📧 Background: Sending email to:", clientEmail);
         await transporter.sendMail({
-          from: process.env.EMAIL_USER || '"Internship Success" <mkhizesenzo732@gmail.com>',
+          from:
+            process.env.EMAIL_USER || "Internship Success <mkhizesenzo732@gmail.com>",
           to: clientEmail,
           subject: `Invoice ${invoice_number.trim()} - Payment Required`,
-          attachments: pdfBuffer ? [{
-            filename: `Invoice_${invoice_number.trim()}.pdf`,
-            content: pdfBuffer,
-            contentType: 'application/pdf'
-          }] : [],
+          attachments: pdfBuffer
+            ? [
+                {
+                  filename: `Invoice_${invoice_number.trim()}.pdf`,
+                  content: pdfBuffer,
+                  contentType: "application/pdf"
+                }
+              ]
+            : [],
           html: `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice Number: ${invoice_number.trim()}</title>
 </head>
-<body style="margin: 0; padding: 40px 20px; font-family: Arial, Helvetica, sans-serif; background-color: #ffffff; color: #000000; line-height: 1.6; font-size: 16px;">
-  <div style="max-width: 600px; margin: 0 auto; background: #ffffff; padding: 40px; border: 1px solid #dddddd;">
-    <h1 style="color: #000000; font-size: 28px; margin-bottom: 10px;">New Invoice Issued</h1>
-    <p style="color: #333333; font-size: 18px; margin-bottom: 30px;">Dear ${clientCompany} Team,</p>
-    
-    <h2 style="color: #000000; font-size: 20px; margin: 30px 0 20px 0;">Invoice Summary</h2>
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
-      <tr><td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Invoice Number:</td><td style="padding: 12px 0; color: #000000; font-family: 'Courier New', monospace;">${invoice_number.trim()}</td></tr>
-      <tr><td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Issue Date:</td><td style="padding: 12px 0; color: #000000;">${new Date(invoice_date).toLocaleDateString('en-ZA')}</td></tr>
-      <tr><td style="padding: 12px 0; color: #333333; font-weight: bold; width: 150px;">Due Date:</td><td style="padding: 12px 0; color: #000000;">${new Date(due_date).toLocaleDateString('en-ZA')}</td></tr>
-    </table>
-    
-    ${pdfGenerated ? 
-      '<p style="margin-bottom: 30px;"><strong>📎 Invoice Attached:</strong> Please download the attached PDF for complete invoice details and payment instructions.</p>' : 
-      '<p style="margin-bottom: 30px; color: #d63333;"></p>'
-    }
-    
-    <div style="background-color: #f8f9fa; border: 1px solid #dddddd; padding: 20px; margin-bottom: 30px; border-radius: 5px;">
-      <p style="color: #333333; font-weight: bold; margin: 0 0 15px 0; font-size: 15px;">Payment Instructions</p>
-      <p style="margin: 0; color: #333333;">Please make payment using the bank details provided in the attached invoice PDF. Use invoice number <strong>${invoice_number.trim()}</strong> as your payment reference.</p>
-    </div>
-    
-    <p style="margin-bottom: 30px;">
-      <a href="${CLIENT_PORTAL_URL}" style="background-color: #0066cc; color: #ffffff; padding: 15px 30px; text-decoration: none; font-weight: bold; border-radius: 5px; display: inline-block; font-size: 16px;">Login to Client Portal</a>
-    </p>
-    
-    <p style="margin-bottom: 20px;">Upload your payment proof directly through the Client Portal for immediate processing.</p>
-    
-    <hr style="border: none; border-top: 1px solid #dddddd; margin: 40px 0;">
-    <h3 style="color: #000000; font-size: 18px; margin-bottom: 15px;">Next Steps:</h3>
-    <ul style="color: #333333; margin-bottom: 40px;">
-      <li>Download and review the attached invoice PDF</li>
-      <li>Make payment using bank details in the PDF</li>
-      <li>Login to Client Portal to upload payment proof</li>
-      <li>Track invoice status in real-time</li>
-    </ul>
-    
-    <hr style="border: none; border-top: 1px solid #dddddd; margin: 40px 0;">
-    <table style="width: 100%; font-size: 14px;">
-      <tr>
-        <td style="color: #666666; padding-bottom: 20px;">
-          <strong>Internship Success</strong><br>1st Floor, Shell House<br>Ferreira Street, Mbombela<br>South Africa, 1200
-        </td>
-        <td style="text-align: right; color: #666666; padding-bottom: 20px;">
-          Email: <a href="mailto:mkhizesenzo732@gmail.com" style="color: #0066cc;">mkhizesenzo732@gmail.com</a><br>Tel: +27 11 123 4567
-        </td>
-      </tr>
-      <tr>
-        <td colspan="2" style="text-align: center; color: #999999; font-size: 12px; padding-top: 20px; border-top: 1px solid #eeeeee;">
-          © 2026 Internship Success. All rights reserved. | This is an automated message.
-        </td>
-      </tr>
-    </table>
-  </div>
+<body style="font-family: Arial, sans-serif; line-height: 1.5; color: #333; margin: 0; padding: 20px;">
+  <p>Dear ${clientCompany} Team,</p><br>
+
+  <p>Please find attached invoice <strong>${invoice_number.trim()}</strong> for the services provided.</p>
+
+  <p><strong>Invoice Date:</strong> ${new Date(invoice_date).toLocaleDateString("en-ZA")}</p>
+  <p><strong>Due Date:</strong> ${new Date(due_date).toLocaleDateString("en-ZA")}</p>
+
+  ${pdfGenerated
+    ? `<p>The invoice PDF is attached for your reference and payment processing.</p>`
+    : `<p>Please contact us if you cannot see the attached invoice and we will send it again.</p>`
+  }
+
+  <h3>Payment Instructions</h3>
+  <p>
+    <strong>Bank:</strong> FNB<br>
+    <strong>Account:</strong> 123456789012<br>
+    <strong>Reference:</strong> ${invoice_number.trim()}<br>
+    <strong>Due date:</strong> ${new Date(due_date).toLocaleDateString("en-ZA")}
+  </p>
+  <p>Please email proof of payment to: <strong>mkhizesenzo732@gmail.com</strong>.</p>
+
+  <p>If you have any questions or need clarification about this invoice, please do not hesitate to contact us.</p>
+
+  <p>Thank you for your business.<br>
+     Regards,<br>
+     Internship Success</p>
 </body>
-</html>`
+</html>
+          `
         });
 
         console.log("✅ Background email SENT SUCCESSFULLY to:", clientEmail);
-
       } catch (bgError) {
         console.error("❌ Background email FAILED:", bgError.message);
-        
+
         // Notify admin of failure
         await safeQuery(
           `INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())`,
@@ -1224,24 +1222,27 @@ app.post("/api/invoices", authenticateAdmin, async (req, res) => {
 
     // 👇 THESE RUN AFTER res.json() - Frontend already redirected
     await safeQuery(
-      'INSERT INTO activity_logs (user_type, user_id, client_company, action, invoice_id) VALUES (?, ?, ?, ?, ?)',
-      ['admin', req.session.userId, clientCompany, 'invoice_created', invoiceId]
+      "INSERT INTO activity_logs (user_type, user_id, client_company, action, invoice_id) VALUES (?, ?, ?, ?, ?)",
+      ["admin", req.session.userId, clientCompany, "invoice_created", invoiceId]
     );
 
     await safeQuery(
       `INSERT INTO notifications (message, user_mail, viewed, created_at) VALUES (?, ?, 0, NOW())`,
-      [`📄 NEW INVOICE ${finalStatus.toUpperCase()}: #${invoice_number.trim()} (R${Number(amount).toLocaleString()})`, ADMIN_EMAIL]
+      [
+        `📄 NEW INVOICE ${finalStatus.toUpperCase()}: #${invoice_number.trim()} (R${Number(amount).toLocaleString()})`,
+        ADMIN_EMAIL
+      ]
     );
-
   } catch (error) {
     console.error("🚨 INVOICE CREATION ERROR:", error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: "Failed to create invoice",
-      error: error.message 
+      error: error.message
     });
   }
 });
+
 
 
 //Update invoice status (PATCH /api/invoices/:id/status)
@@ -2213,6 +2214,24 @@ app.delete('/api/clients/:id', authenticateAdmin, async (req, res) => {
   }
 });
 
+app.get('/api/admin/analytics', async (req, res) => {
+  try {
+    const analytics = await safeQuery(`
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(CASE WHEN action = 'proof_uploaded' THEN 1 END) as uploads,
+        COUNT(CASE WHEN action = 'client_registered' THEN 1 END) as clients
+      FROM activity_logs 
+      WHERE DATE(created_at) >= DATE_SUB(NOW(), INTERVAL 2 YEAR)
+      GROUP BY DATE(created_at)
+      ORDER BY date DESC
+    `);
+    
+    res.json({ timeline: analytics });
+  } catch (error) {
+    res.status(500).json({ error: 'Analytics fetch failed' });
+  }
+});
 
 
     // Error handler - CATCHES ALL PROMISE REJECTIONS
